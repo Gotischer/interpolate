@@ -96,6 +96,7 @@ $batLines = @()
 
 # --- BAT header ---
 $batLines += '@echo off'
+$batLines += 'chcp 65001 >nul 2>&1'
 $batLines += 'setlocal enabledelayedexpansion'
 $batLines += 'title MPV Interpolation Wizard'
 $batLines += 'echo.'
@@ -156,7 +157,7 @@ $batLines += 'endlocal'
 
 # Write .bat file
 $batContent = $batLines -join "`r`n"
-[System.IO.File]::WriteAllText($outBat, $batContent, [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText($outBat, $batContent, (New-Object System.Text.UTF8Encoding $false))
 
 # Cleanup staging
 Remove-Item $staging -Recurse -Force -EA SilentlyContinue
