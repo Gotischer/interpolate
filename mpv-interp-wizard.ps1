@@ -111,7 +111,7 @@ function Invoke-FirstTimeSetup {
     # Local bundle (optional)
     Write-Host ""
     Write-Info "Si ya tienes los .7z de vs-mlrt descargados, indica la carpeta"
-    $config.LocalBundleDir = Read-PathPrompt -Label "Carpeta con .7z (opcional, Enter para omitir)" -Default "" -AllowEmpty $true
+    $config.LocalBundleDir = Read-PathPrompt -Label 'Carpeta con .7z descargados, o Enter para omitir' -Default '' -AllowEmpty $true
 
     if (Export-WizardConfig -Config $config -Path $configPath) {
         Write-Ok "Configuración guardada en $configPath"
@@ -419,17 +419,17 @@ while ($true) {
     Clear-Host
 
     $isInstalled = Invoke-QuickCheck -Config $config -GPUEnv $gpuEnv
-    $statusLine = if ($isInstalled) { "✓ Instalado y funcional" } else { "✗ No instalado o incompleto" }
-    $gpuLine    = "$($gpuEnv.GPU) → $($gpuEnv.SupportedBackend)"
+    $statusLine = if ($isInstalled) { '[OK] Instalado y funcional' } else { '[!!] No instalado o incompleto' }
+    $gpuLine    = $gpuEnv.GPU + ' -> ' + $gpuEnv.SupportedBackend
 
     $menuItems = @(
-        "$(if ($isInstalled) { '🔄 Reinstalar' } else { '📦 Instalar' })",
-        "⬆️  Actualizar",
-        "🔧 Reparar",
-        "🔍 Diagnóstico",
-        "⚙️  Configuración",
-        "🗑️  Desinstalar",
-        "❌ Salir"
+        $(if ($isInstalled) { 'Reinstalar' } else { 'Instalar' }),
+        'Actualizar',
+        'Reparar',
+        'Diagnostico',
+        'Configuracion',
+        'Desinstalar',
+        'Salir'
     )
 
     $footer = "Estado: $statusLine | GPU: $gpuLine"
