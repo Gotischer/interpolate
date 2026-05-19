@@ -1,0 +1,10 @@
+# .gitignore
+*.log
+*.bak
+*.engine
+*.config.json
+update-cache.json
+MPV-Interp-Wizard.bat
+SHA256.txt
+7zr.exe
+bin/

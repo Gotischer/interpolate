@@ -1,0 +1,169 @@
+{
+    "profiles": {
+        "Blackwell": {
+            "label": "🏆 Máxima Calidad (RTX 50xx)",
+            "gpu_gen": "Blackwell",
+            "compute_cap": "12.0",
+            "backend": "TRT",
+            "model": "v4.25_heavy",
+            "fp16": true,
+            "streams": 2,
+            "workspace": null,
+            "notes": "RTX 5080/5090 — Full power, no compromises"
+        },
+        "Ada": {
+            "label": "🏆 Máxima Calidad (RTX 40xx)",
+            "gpu_gen": "Ada Lovelace",
+            "compute_cap": "8.9",
+            "backend": "TRT",
+            "model": "v4.25_heavy",
+            "fp16": true,
+            "streams": 2,
+            "workspace": null,
+            "notes": "RTX 4060-4090 — Full quality"
+        },
+        "Ampere": {
+            "label": "🏆 Máxima Calidad (RTX 30xx)",
+            "gpu_gen": "Ampere",
+            "compute_cap": "8.6",
+            "backend": "TRT",
+            "model": "v4.25_heavy",
+            "fp16": true,
+            "streams": 2,
+            "workspace": null,
+            "notes": "RTX 3050-3090 — Full quality"
+        },
+        "Turing": {
+            "label": "⚡ Balanceado (RTX 20xx / GTX 16xx)",
+            "gpu_gen": "Turing",
+            "compute_cap": "7.5",
+            "backend": "TRT",
+            "model": "v4.25",
+            "fp16": true,
+            "streams": 1,
+            "workspace": null,
+            "notes": "RTX 2060-2080 / GTX 1650-1660 — Good quality, single stream for stability"
+        },
+        "Pascal": {
+            "label": "💨 Rendimiento (GTX 10xx)",
+            "gpu_gen": "Pascal",
+            "compute_cap": "6.1",
+            "backend": "TRT",
+            "model": "v4.25",
+            "fp16": false,
+            "streams": 1,
+            "workspace": 1000,
+            "notes": "GTX 1050-1080 — FP32 forced, limited workspace, single stream"
+        },
+        "NVIDIA_Old": {
+            "label": "💨 Rendimiento (NVIDIA antigua)",
+            "gpu_gen": "Maxwell/Kepler",
+            "compute_cap": "5.x",
+            "backend": "NCNN_VK",
+            "model": "v4.22",
+            "fp16": false,
+            "streams": 1,
+            "workspace": null,
+            "notes": "GTX 9xx and older — Vulkan/NCNN backend"
+        },
+        "AMD_RDNA3": {
+            "label": "⚡ Balanceado (AMD RDNA3)",
+            "gpu_gen": "RDNA3",
+            "compute_cap": null,
+            "backend": "NCNN_VK",
+            "model": "v4.25",
+            "fp16": true,
+            "streams": 1,
+            "workspace": null,
+            "notes": "RX 7600-7900 — Vulkan/NCNN, good performance"
+        },
+        "AMD_RDNA2": {
+            "label": "💨 Rendimiento (AMD RDNA2)",
+            "gpu_gen": "RDNA2",
+            "compute_cap": null,
+            "backend": "NCNN_VK",
+            "model": "v4.22",
+            "fp16": true,
+            "streams": 1,
+            "workspace": null,
+            "notes": "RX 6500-6900 — Vulkan/NCNN"
+        },
+        "AMD_Old": {
+            "label": "💨 Rendimiento (AMD antigua)",
+            "gpu_gen": "GCN/RDNA1",
+            "compute_cap": null,
+            "backend": "NCNN_VK",
+            "model": "v4.22",
+            "fp16": false,
+            "streams": 1,
+            "workspace": null,
+            "notes": "RX 5xx / Vega / RX 5xxx — Vulkan/NCNN, limited"
+        },
+        "Intel_Arc": {
+            "label": "⚡ Balanceado (Intel Arc)",
+            "gpu_gen": "Alchemist",
+            "compute_cap": null,
+            "backend": "NCNN_VK",
+            "model": "v4.22",
+            "fp16": true,
+            "streams": 1,
+            "workspace": null,
+            "notes": "Intel Arc A-series — Vulkan/NCNN"
+        },
+        "iGPU_Xe": {
+            "label": "💨 Rendimiento (Intel Iris Xe)",
+            "gpu_gen": "Iris Xe",
+            "compute_cap": null,
+            "backend": "NCNN_VK",
+            "model": "v4.22",
+            "fp16": true,
+            "streams": 1,
+            "workspace": null,
+            "notes": "Intel Iris Xe — Vulkan/NCNN, may be slow"
+        },
+        "Fallback": {
+            "label": "🐢 Compatibilidad (CPU — MVTools)",
+            "gpu_gen": null,
+            "compute_cap": null,
+            "backend": "MVTOOLS",
+            "model": null,
+            "fp16": null,
+            "streams": null,
+            "workspace": null,
+            "notes": "No dedicated GPU or unsupported GPU — CPU-only motion interpolation"
+        }
+    },
+    "rife_models": {
+        "v4.25_heavy": {
+            "enum": "RIFEModel.v4_25_heavy",
+            "onnx_files": ["rife_v4.25_heavy_ensemble_op20.onnx"],
+            "vram_mb": 2800,
+            "quality": 5,
+            "speed": 2,
+            "notes": "Best quality, highest VRAM usage"
+        },
+        "v4.25": {
+            "enum": "RIFEModel.v4_25",
+            "onnx_files": ["rife_v4.25_ensemble_op20.onnx"],
+            "vram_mb": 1600,
+            "quality": 4,
+            "speed": 3,
+            "notes": "Great quality, moderate VRAM — recommended for most GPUs"
+        },
+        "v4.22": {
+            "enum": "RIFEModel.v4_22",
+            "onnx_files": ["rife_v4.22_ensemble_op20.onnx"],
+            "vram_mb": 900,
+            "quality": 3,
+            "speed": 4,
+            "notes": "Good quality, low VRAM — for weaker GPUs or Vulkan/NCNN"
+        }
+    },
+    "version_defaults": {
+        "vapoursynth": "R76",
+        "vs_mlrt": "v15.16",
+        "wizard_repo": "Gotischer/interpolate",
+        "vs_mlrt_repo": "AmusementClub/vs-mlrt",
+        "vapoursynth_repo": "vapoursynth/vapoursynth"
+    }
+}
