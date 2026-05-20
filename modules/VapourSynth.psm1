@@ -159,6 +159,14 @@ Lib\site-packages
             throw "Wheel de VapourSynth no encontrado en el paquete portable"
         }
 
+        # Backend.TRT_RTX (vs-mlrt) requiere onnx + nvidia-modelopt para compilar
+        # engines al vuelo via tensorrt_rtx_1_4.dll. Sin estos, el .vpy lanza
+        # ModuleNotFoundError y cae a Backend.TRT generico (mas lento en RTX).
+        # Setuptools/wheel son prerequisitos de modelopt[onnx].
+        Write-Host "     Instalando deps de TensorRT-RTX (onnx + modelopt[onnx])..." -ForegroundColor Gray
+        & $pyExe -m pip install --no-warn-script-location setuptools wheel | Out-Host
+        & $pyExe -m pip install --no-warn-script-location onnx 'nvidia-modelopt[onnx]' | Out-Host
+
         # Cleanup get-pip.py and other temporary setup artifacts
         $pipScript = Join-Path $Config.BaseDir "get-pip.py"
         Remove-Item $pipScript -Force -EA SilentlyContinue

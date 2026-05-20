@@ -4,12 +4,12 @@
             "label": "🏆 Máxima Calidad (RTX 50xx)",
             "gpu_gen": "Blackwell",
             "compute_cap": "12.0",
-            "backend": "TRT",
+            "backend": "TRT_RTX",
             "model": "v4.25",
             "fp16": true,
             "streams": 2,
             "workspace": null,
-            "notes": "RTX 5080/5090 — v4.25 default for fluid 4K@60. Sube a v4.25_heavy si solo consumes 1080p."
+            "notes": "RTX 5080/5090 — TRT-RTX usa kernels nativos sm_120. v4.25 default para 4K@60 fluido. Sube a v4.25_heavy si solo consumes 1080p."
         },
         "Ada": {
             "label": "🏆 Máxima Calidad (RTX 40xx)",
