@@ -4,12 +4,12 @@
             "label": "🏆 Máxima Calidad (RTX 50xx)",
             "gpu_gen": "Blackwell",
             "compute_cap": "12.0",
-            "backend": "TRT_RTX",
+            "backend": "TRT",
             "model": "v4.25",
             "fp16": true,
             "streams": 2,
             "workspace": null,
-            "notes": "RTX 5080/5090 — TRT-RTX usa kernels nativos sm_120. v4.25 default para 4K@60 fluido. Sube a v4.25_heavy si solo consumes 1080p."
+            "notes": "RTX 5080/5090 — TRT-RTX 1.4 tiene peor jitter en este driver (peaks 3x mas altos pese a mismo avg). Volver a TRT_RTX cuando salga 1.5+."
         },
         "Ada": {
             "label": "🏆 Máxima Calidad (RTX 40xx)",

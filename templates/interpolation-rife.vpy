@@ -113,10 +113,28 @@ else:
     # RIFE with sc=True handles scene detection internally.
     # No external SCDetect plugin needed (MiscFilters not in VS R73 portable).
 
+    # ---- Downscale source->display antes de RIFE ---------------------------
+    # Si el source es mas grande que el display, RIFE en res nativa de pantalla
+    # es hasta 4x mas barato (a 4K->1080p) y la perdida visual es nula (el
+    # display fisico no puede mostrar mas pixels). mpv hace cualquier resize
+    # residual con libplacebo en el VO, que es mejor que cualquier resize VS.
+    # display_res es inyectado por mpv como lista [width, height].
+    try:
+        dw, dh = int(display_res[0]), int(display_res[1])
+    except Exception:
+        dw = dh = 0
+    target_w, target_h = clip.width, clip.height
+    if dw > 0 and dh > 0 and (clip.width > dw or clip.height > dh):
+        ratio = min(dw / clip.width, dh / clip.height)
+        target_w = (int(clip.width  * ratio) // 2) * 2  # mod2 para chroma
+        target_h = (int(clip.height * ratio) // 2) * 2
+
     # ---- Convert to RGBH for RIFE ------------------------------------------
     # RGBH (RGB Half-float, 16-bit) preserves HDR dynamic range.
+    # Si hubo downscale, lo combinamos aqui en un solo paso (evita un resize).
     clip = core.resize.Bicubic(
         clip, format=vs.RGBH,
+        width=target_w, height=target_h,
         matrix_in_s=matrix_str,
         transfer_in_s=transfer_str,
         primaries_in_s=primaries_str,
