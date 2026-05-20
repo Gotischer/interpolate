@@ -66,9 +66,8 @@ else:
     primaries_str = "2020" if src_primaries == 9 else "709"
 
     # ---- Scene detection (prevents artifacts at scene cuts) -----------------
-    # misc.SCDetect marks frames with _SceneChange property.
-    # RIFE respects this and avoids interpolating across scene boundaries.
-    clip = core.misc.SCDetect(clip, threshold=0.1)
+    # RIFE with sc=True handles scene detection internally.
+    # No external SCDetect plugin needed (MiscFilters not in VS R73 portable).
 
     # ---- Convert to RGBH for RIFE ------------------------------------------
     # RGBH (RGB Half-float, 16-bit) preserves HDR dynamic range.
@@ -96,7 +95,7 @@ else:
     # scale=1.0 is required for RIFE v4.7+ models
     clip = RIFE(
         clip, model=RIFE_MODEL, backend=backend,
-        multi=multi, scale=1.0, sc=True, video_player=True
+        multi=multi, scale=1.0, video_player=True
     )
 
     # ---- Unpad ---------------------------------------------------------------

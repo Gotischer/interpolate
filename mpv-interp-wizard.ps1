@@ -147,7 +147,7 @@ function Invoke-Install {
     }
 
     # 2) VapourSynth
-    $vsDir = Install-VapourSynth -Config $config -TargetRelease $config.VsRelease
+    $vsDir = Install-VapourSynth -Config $config -TargetRelease $config.VsRelease -Force
 
     if ($backendType -ne 'MVTOOLS') {
         # 3) vs-mlrt
@@ -179,13 +179,17 @@ function Invoke-Install {
     New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
         -WizardVersion $Global:WizardVersion -SetHzTemplateVersion $Global:SetHzTemplateVersion
 
-    # 7) Update config with installed versions
+    # 7b) Generate mpv-vs.bat launcher (sets VSSCRIPT_PATH for portable VS)
+    New-MpvLauncher -Config $config -Force
+
+    # 8) Update config with installed versions
     if ($mlrtTag) { $config.MlrtVersion = $mlrtTag }
     Export-WizardConfig -Config $config -Path $configPath | Out-Null
 
     Write-Host ''
     Write-Title 'INSTALACION COMPLETA!'
-    Write-Host '  Abre cualquier video con mpv y disfruta.' -ForegroundColor Green
+    Write-Host '  Abre cualquier video con mpv-vs.bat y disfruta.' -ForegroundColor Green
+    Write-Host '  (mpv-vs.bat esta junto a mpv.exe)' -ForegroundColor Green
     Write-Host ''
     Write-Host '  Atajos en mpv:' -ForegroundColor Cyan
     Write-Host '    Ctrl+i       -> Toggle interpolacion ON/OFF' -ForegroundColor Gray

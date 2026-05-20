@@ -144,7 +144,9 @@ function Invoke-QuickCheck {
     if (-not $Config.MpvExe -or -not (Test-Path $Config.MpvExe)) { return $false }
 
     $vsDir = Join-Path $Config.BaseDir 'vapoursynth-portable'
-    if (-not (Test-Path (Join-Path $vsDir 'VSPipe.exe'))) { return $false }
+    $vspipe = Join-Path $vsDir 'VSPipe.exe'
+    if (-not (Test-Path $vspipe)) { $vspipe = Join-Path $vsDir 'Scripts\vspipe.exe' }
+    if (-not (Test-Path $vspipe)) { return $false }
 
     $vpyPath = Join-Path $Config.MpvConfigDir 'interpolation.vpy'
     if (-not (Test-Path $vpyPath)) { return $false }
