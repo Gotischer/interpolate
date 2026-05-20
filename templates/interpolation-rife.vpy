@@ -6,10 +6,54 @@
 # mpv injects: video_in, container_fps, display_fps
 # =============================================================================
 import math
+import os
 import vapoursynth as vs
-from vsmlrt import RIFE, RIFEModel, Backend
 
 core = vs.core
+
+# ---- Explicit plugin loading -----------------------------------------------
+# vs-mlrt plugins (vsov/vsort/vsncnn/vstrt/vstrt_rtx) currently use API3, which
+# the VS R76 wheel does not auto-load when imported via VSScript. We bypass the
+# autoload heuristics entirely and load each plugin by absolute path, picking
+# the search dirs in order of likelihood. Errors are swallowed (a backend may
+# legitimately be missing, e.g. vstrt_rtx without RTX), but if *none* loads we
+# raise so the user gets a clearer error than vsmlrt's "cannot load any filters".
+def _load_mlrt_plugins():
+    candidates = []
+    # 1) Explicit hint via env var
+    extra = os.environ.get("VAPOURSYNTH_EXTRA_PLUGIN_PATH")
+    if extra:
+        candidates.append(extra)
+    # 2) Standard portable layout: <portable>/vs-plugins next to libvapoursynth.dll
+    here = os.path.dirname(os.path.abspath(vs.__file__))                 # .../site-packages/vapoursynth
+    candidates.append(os.path.normpath(os.path.join(here, "..", "..", "..", "vs-plugins")))
+    # 3) Wheel's bundled plugins dir
+    candidates.append(os.path.join(here, "plugins"))
+
+    loaded = 0
+    for d in candidates:
+        if not d or not os.path.isdir(d):
+            continue
+        for dll in ("vsov.dll", "vsort.dll", "vsncnn.dll", "vstrt.dll", "vstrt_rtx.dll"):
+            p = os.path.join(d, dll)
+            if not os.path.isfile(p):
+                continue
+            try:
+                core.std.LoadPlugin(p)
+                loaded += 1
+            except Exception:
+                pass
+        if loaded:
+            break
+    if not loaded:
+        raise RuntimeError(
+            "interpolation.vpy: no vs-mlrt backend plugins found. "
+            "Looked in: " + ", ".join(c for c in candidates if c)
+        )
+
+_load_mlrt_plugins()
+
+from vsmlrt import RIFE, RIFEModel, Backend
 
 # ---- Configuration (set by wizard, editable) --------------------------------
 RIFE_MODEL      = {{RIFE_MODEL_ENUM}}
