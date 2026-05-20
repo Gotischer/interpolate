@@ -147,6 +147,26 @@ else:
         dither_type="error_diffusion"
     )
 
+    # ---- Scene detection (zero-plugin polyfill) ----------------------------
+    # vsmlrt.RIFE evalua frame.props["_SceneChangeNext"] internamente: si es
+    # truthy, devuelve el frame original en lugar de interpolar. Sin esta
+    # propiedad RIFE intenta morphear entre planos de escenas distintas y
+    # produce el "salto brusco" visible en cortes de camara.
+    #
+    # No usamos misc.SCDetect ni mv.SCDetection (no estan en el portable R76).
+    # Polyfill con PlaneStats: convertimos a GRAY8 pequeno y medimos la
+    # diferencia promedio entre cada frame y el siguiente. Umbral 0.10 detecta
+    # cortes duros sin disparar falsos positivos en movimiento normal.
+    SC_THRESHOLD = 0.10
+    sc_src   = core.resize.Bicubic(clip, format=vs.GRAY8, width=320, height=180, matrix_s="709")
+    sc_next  = sc_src.std.DuplicateFrames(frames=[sc_src.num_frames - 1]).std.Trim(first=1)
+    sc_stats = core.std.PlaneStats(sc_src, sc_next, prop="SC")
+    def _attach_sc(n, f):
+        fout = f[0].copy()
+        fout.props["_SceneChangeNext"] = 1 if f[1].props.get("SCDiff", 0.0) > SC_THRESHOLD else 0
+        return fout
+    clip = core.std.ModifyFrame(clip, [clip, sc_stats], _attach_sc)
+
     # ---- Pad to mod32 (required by RIFE) ------------------------------------
     pad_w = math.ceil(clip.width / 32) * 32 - clip.width
     pad_h = math.ceil(clip.height / 32) * 32 - clip.height
