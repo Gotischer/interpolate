@@ -74,7 +74,12 @@ src_h = clip.height
 #  120Hz / 24fps -> ceil(5.0) = 5 -> 120fps -> perfect
 target_fps = display_fps if display_fps and display_fps > 0 else 60.0
 src_fps    = container_fps if container_fps and container_fps > 0 else 24.0
-multi      = max(2, math.ceil(target_fps / src_fps))
+# Cap maximo de interpolacion. Sin cap, un TV 120Hz con source 24fps fuerza
+# multi=5 (o 6 si mpv detecta 143.85 Hz por HDMI 2.1) lo que dispara el peak
+# por frame. Cap a 5 produce 120 fps exactos para 120Hz y mantiene la GPU
+# holgada. Subir a 6+ solo si tu GPU lo aguanta a la res RIFE elegida.
+MAX_RIFE_MULTI = 5
+multi      = min(MAX_RIFE_MULTI, max(2, math.ceil(target_fps / src_fps)))
 
 # ---- HDR detection ----------------------------------------------------------
 def is_hdr(clip):
