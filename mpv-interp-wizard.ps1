@@ -182,7 +182,7 @@ function Invoke-Install {
 
     $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
     New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
-        -Buffered 8 -Concurrent $concurrent `
+        -Buffered 16 -Concurrent $concurrent `
         -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
 
     New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
@@ -246,7 +246,7 @@ function Invoke-Repair {
         1 {
             $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
             New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
-                -Buffered 8 -Concurrent $concurrent `
+                -Buffered 16 -Concurrent $concurrent `
                 -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
         }
         2 {
@@ -286,7 +286,7 @@ function Invoke-Repair {
                 -VpyTemplateVersion $Global:VpyTemplateVersion
             $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
             New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
-                -Buffered 8 -Concurrent $concurrent `
+                -Buffered 16 -Concurrent $concurrent `
                 -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
             New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
                 -WizardVersion $Global:WizardVersion -SetHzTemplateVersion $Global:SetHzTemplateVersion
