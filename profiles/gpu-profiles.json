@@ -5,33 +5,33 @@
             "gpu_gen": "Blackwell",
             "compute_cap": "12.0",
             "backend": "TRT",
-            "model": "v4.25_heavy",
+            "model": "v4.25",
             "fp16": true,
             "streams": 2,
             "workspace": null,
-            "notes": "RTX 5080/5090 — Full power, no compromises"
+            "notes": "RTX 5080/5090 — v4.25 default for fluid 4K@60. Sube a v4.25_heavy si solo consumes 1080p."
         },
         "Ada": {
             "label": "🏆 Máxima Calidad (RTX 40xx)",
             "gpu_gen": "Ada Lovelace",
             "compute_cap": "8.9",
             "backend": "TRT",
-            "model": "v4.25_heavy",
+            "model": "v4.25",
             "fp16": true,
             "streams": 2,
             "workspace": null,
-            "notes": "RTX 4060-4090 — Full quality"
+            "notes": "RTX 4060-4090 — v4.25 mantiene 4K@60. _heavy queda como upgrade para 1080p."
         },
         "Ampere": {
             "label": "🏆 Máxima Calidad (RTX 30xx)",
             "gpu_gen": "Ampere",
             "compute_cap": "8.6",
             "backend": "TRT",
-            "model": "v4.25_heavy",
+            "model": "v4.25",
             "fp16": true,
             "streams": 2,
             "workspace": null,
-            "notes": "RTX 3050-3090 — Full quality"
+            "notes": "RTX 3050-3090 — v4.25 estable a 4K. Heavy solo recomendado en 3090/Ti a <=1440p."
         },
         "Turing": {
             "label": "⚡ Balanceado (RTX 20xx / GTX 16xx)",
