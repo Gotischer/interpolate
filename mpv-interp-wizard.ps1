@@ -40,11 +40,20 @@ Import-Module (Join-Path $modulesDir "Updater.psm1")      -Force -DisableNameChe
 Import-Module (Join-Path $modulesDir "Diagnostics.psm1")  -Force -DisableNameChecking
 
 # --- Start transcript for logging ---------------------------------------------
+# PowerShell 5.1's Start-Transcript writes ANSI/Windows-1252 by default while
+# the wizard outputs UTF-8 (Console.OutputEncoding above). Force UTF-8 with BOM
+# so log viewers detect it correctly and accented chars don't render as mojibake
+# (e.g. "InterpolaciÃ³n" instead of "Interpolación").
 try {
     $logDir = Split-Path (Get-ConfigFilePath) -Parent
     if (-not (Test-Path $logDir)) { $logDir = $wizardRoot }
     $logFile = Join-Path $logDir "mpv-interp-wizard.log"
-    Start-Transcript -Path $logFile -Append -EA SilentlyContinue | Out-Null
+    # -Encoding param was added in PS 5.1; older hosts ignore the failure.
+    try {
+        Start-Transcript -Path $logFile -Append -Encoding utf8 -EA Stop | Out-Null
+    } catch {
+        Start-Transcript -Path $logFile -Append -EA SilentlyContinue | Out-Null
+    }
 } catch {}
 
 # =============================================================================
