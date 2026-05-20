@@ -21,7 +21,7 @@ Doble clic y listo. No requiere instalación previa.
 | 🌐 **RIFE NCNN/Vulkan** | Para AMD, Intel Arc, NVIDIA antiguas |
 | 🐢 **MVTools (CPU)** | Fallback universal sin GPU dedicada |
 | 🎬 **Scene Detection** | Polyfill con `PlaneStats` (sin plugins) — RIFE corta limpio en cambios de escena |
-| 🔍 **Cap 1080p + NIS upscale** | RIFE corre como máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS no es DLSS** — corre en cualquier GPU (NVIDIA, AMD, Intel) |
+| 🔍 **Cap 1080p + NIS upscale** | RIFE corre como máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS ≠ DLSS** — es un shader espacial público que corre en cualquier GPU (NVIDIA/AMD/Intel) |
 | 📺 **Multi-monitor** | Detecta cambios de refresh rate y re-aplica el filtro al mover la ventana |
 | 🌈 **HDR** | Interpolación HDR con preservación BT.2020/PQ/HLG y metadata MaxCLL |
 | 🔧 **Auto-update** | Notificaciones de nuevas versiones |
@@ -124,19 +124,24 @@ Source (cualquier res) ──┐
 - **Multi máximo 5×**: para 24 fps + 120 Hz da exactos 120 fps, sin sobrecargar la GPU con 6×.
 - **NIS upscale**: mpv hace el upscale espacial final al display real con el shader público de NVIDIA — mismo que usa SVP.
 
-### NIS ≠ DLSS
+### NIS ≠ DLSS (toda la familia DLSS)
 
-Aclaración importante porque ambos vienen del mismo repo de NVIDIA y se confunden:
+Aclaración importante porque NIS vive en el repo `NVIDIA/DLSS` de GitHub y la gente lo confunde con cualquiera de los productos DLSS. **NIS no es ningún DLSS** — comparte el repo solo porque NVIDIA lo distribuye junto, pero técnicamente son cosas distintas:
 
-| | **NIS** (lo que usamos) | **DLSS Super Resolution** |
-|---|---|---|
-| Tipo | Shader espacial (Lanczos + sharpening) | Red neuronal con Tensor Cores |
-| GPU soportadas | **Cualquiera** — NVIDIA, AMD, Intel, iGPU | **Solo RTX 20xx+** (Tensor Cores) |
-| API | GLSL público, MIT licensed | Streamline SDK, integración por app |
-| Requiere | Compute shaders básicos | `nvngx_dlss.dll`, motion vectors, depth buffer |
-| Integrable en mpv | ✓ (vía libplacebo glsl-shader) | ✗ (necesita per-app pipeline) |
+| Tecnología | Qué hace | GPU requerida | ¿Por qué la usamos / no? |
+|---|---|---|---|
+| **NIS** (lo que usamos) | Upscale espacial (Lanczos + sharpening) | Cualquiera con compute shaders | ✓ GLSL público MIT, integra como shader de mpv |
+| **DLSS Super Resolution** | Upscale con red neuronal | RTX 20xx+ (Tensor Cores) | ✗ Requiere motion vectors + depth buffer del render — un video grabado no los tiene |
+| **DLSS Frame Generation** (DLSS-FG) | Genera frames intermedios con AI — **conceptualmente igual que RIFE** | RTX 40xx+ (Optical Flow Accelerator) | ✗ Necesita OFA hardware + Streamline SDK integrado por app. RIFE hace lo mismo sin esos requisitos |
+| **DLSS Multi Frame Generation** (DLSS 4 MFG) | Hasta 3 frames generados por uno renderizado | RTX 50xx exclusivo | ✗ Mismo problema que FG, peor: 50xx-only |
+| **DLSS Ray Reconstruction** | Denoising AI para ray tracing | RTX 20xx+ | ✗ No aplica a video reproducción |
+| **DLAA** | Antialiasing con la red de DLSS-SR | RTX 20xx+ | ✗ No aplica (no estamos renderizando geometría) |
 
-El shader `NVScaler.glsl` que el wizard copia a `portable_config/shaders/` **funciona en cualquier GPU**. La elección entre RTX/AMD/Intel solo afecta al **backend de RIFE** (TensorRT vs NCNN-Vulkan vs OpenVINO), no al upscaler post-RIFE.
+**Diferencia clave con RIFE vs DLSS-FG**: ambos interpolan frames con AI, pero:
+- **DLSS-FG** depende de motion vectors generados durante el render (un juego sabe cómo se mueve cada pixel porque lo pintó él). Un video pre-grabado **no tiene esos datos** — DLSS-FG no puede funcionar.
+- **RIFE** estima el optical flow internamente desde dos frames consecutivos. Por eso funciona en cualquier video y en cualquier GPU.
+
+El shader `NVScaler.glsl` que el wizard copia a `portable_config/shaders/` es **solo NIS** (la parte de upscale espacial) y **funciona en cualquier GPU**. La elección entre RTX/AMD/Intel solo afecta al **backend de RIFE** (TensorRT vs NCNN-Vulkan vs OpenVINO), no al upscaler post-RIFE.
 
 ## Multi-Monitor
 
