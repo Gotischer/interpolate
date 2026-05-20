@@ -44,10 +44,16 @@ Doble clic y listo. No requiere instalación previa.
 
 ## Requisitos
 
-- Windows 10 o superior
-- mpv con soporte VapourSynth ([shinchiro](https://github.com/shinchiro/mpv-winbuild-cmake/releases) o [Gresaca](https://github.com/Gresaca/mpv-build/releases))
-- ~7 GB libres en disco para RIFE
-- Driver NVIDIA reciente (solo para RIFE/TensorRT)
+- **Windows 10 o superior**
+- **mpv build con VapourSynth habilitado** — el wizard se prueba contra los builds de [**shinchiro**](https://github.com/shinchiro/mpv-winbuild-cmake/releases). Los builds oficiales de mpv.io **no incluyen** VapourSynth.
+  - Bajá el `.7z` que corresponda a tu CPU:
+    - `mpv-x86_64-v3-YYYYMMDD-git-XXXXXXX.7z` — recomendado en CPU moderna (Intel Haswell+ / AMD Zen+, con AVX2).
+    - `mpv-x86_64-YYYYMMDD-git-XXXXXXX.7z` — baseline, para CPU previa a 2013.
+  - Mínimo: cualquier release de 2025 en adelante (necesita API de VapourSynth R76).
+  - Extraé el `.7z` a una carpeta (ej. `H:\mpv\`) y dejá los archivos sueltos ahí — esa será la ruta a `mpv.exe` que pide el wizard.
+- **~7 GB libres en disco** para VapourSynth + vs-mlrt + modelos RIFE
+- **Driver NVIDIA reciente** (solo si vas a usar RIFE TensorRT — recomendado: NVIDIA Game Ready/Studio 560+ para RTX 50xx, 550+ para RTX 30/40xx)
+- **Python embed 3.13.x** — lo descarga el wizard automáticamente (no hace falta tenerlo instalado)
 
 ## Cómo se usa
 
