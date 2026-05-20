@@ -75,6 +75,13 @@ function Install-VapourSynth {
 
         Write-Host "     Extrayendo Python..." -ForegroundColor Gray
         if (-not (Test-Path $vsDir)) { New-Item -ItemType Directory -Path $vsDir | Out-Null }
+
+        # Remove any python3xx.dll/.zip/._pth left from previous installs to
+        # avoid version mismatch (e.g. 3.14 surviving from an older wizard run).
+        Get-ChildItem $vsDir -File -EA SilentlyContinue |
+            Where-Object { $_.Name -match '^python3\d+(\.dll|\.zip|\._pth)$' -or $_.Name -eq 'python3.dll' } |
+            Remove-Item -Force -EA SilentlyContinue
+
         Expand-Archive -Path $pyZipPath -DestinationPath $vsDir -Force
 
         # Configure python3xx._pth to enable site-packages and site.py
@@ -212,10 +219,10 @@ function Copy-VapourSynthDllsToMpv {
 
     $pyDll = $null
     if ($pyVersionString) {
-        $pyDll = Get-Item (Join-Path $VsDir "python3$pyVersionString.dll") -EA SilentlyContinue
+        $pyDll = Get-Item (Join-Path $VsDir "python$pyVersionString.dll") -EA SilentlyContinue
     }
     if (-not $pyDll) {
-        # Fallback: get the highest version DLL
+        # Fallback: pick the python3xx.dll that matches what VSScript.dll actually links to
         $pyDll = Get-ChildItem $VsDir -Filter "python3*.dll" | Where-Object { $_.Name -match '^python3\d+\.dll$' } | Sort-Object Name -Descending | Select-Object -First 1
     }
     if (-not $pyDll) {

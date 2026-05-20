@@ -288,7 +288,7 @@ set VSSCRIPT_PATH=$vsScriptDll
 set PYTHONHOME=$vsDir
 set PYTHONPATH=$vsDir\Lib\site-packages
 set VAPOURSYNTH_EXTRA_PLUGIN_PATH=$vsDir\vs-plugins
-set PATH=$vsDir;$vsDir\Lib\site-packages;%PATH%
+set PATH=$vsDir;$vsDir\Lib\site-packages;$vsDir\vs-plugins\vsmlrt-cuda;$vsDir\vs-plugins\vsort;$vsDir\vs-plugins\vsov;%PATH%
 
 rem Launch mpv with all arguments forwarded
 "$mpvExe" --player-operation-mode=pseudo-gui %*

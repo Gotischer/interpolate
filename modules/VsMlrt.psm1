@@ -77,23 +77,19 @@ function Install-VsMlrt {
 
     Expand-7zArchive -Archive $archivePath -DestDir $tmpDir -BaseDir $Config.BaseDir
 
-    # Copy DLLs and executables to vs-plugins
-    $patterns = @("*.dll", "*.exe", "*.py")
-    foreach ($pat in $patterns) {
-        Get-ChildItem $tmpDir -Filter $pat -Recurse | ForEach-Object {
-            $dest = Join-Path $pluginDir $_.Name
-            Copy-Item $_.FullName $dest -Force
-            Write-Host "     $($_.Name)" -ForegroundColor DarkGray
-        }
+    # Copy files from root without recursing into subdirectories
+    Get-ChildItem $tmpDir -File | ForEach-Object {
+        $dest = Join-Path $pluginDir $_.Name
+        Copy-Item $_.FullName $dest -Force
+        Write-Host "     $($_.Name)" -ForegroundColor DarkGray
     }
 
-    # Copy vsmlrt-cuda directory if it exists (contains CUDA runtime DLLs)
-    $cudaDir = Get-ChildItem $tmpDir -Directory -Filter "vsmlrt-cuda" -Recurse | Select-Object -First 1
-    if ($cudaDir) {
-        $destCuda = Join-Path $pluginDir "vsmlrt-cuda"
-        if (-not (Test-Path $destCuda)) { New-Item -ItemType Directory -Path $destCuda | Out-Null }
-        Get-ChildItem $cudaDir.FullName | Copy-Item -Destination $destCuda -Force -Recurse
-        Write-Host "     vsmlrt-cuda/ (CUDA runtime)" -ForegroundColor DarkGray
+    # Copy backend subdirectories (e.g. vsmlrt-cuda, vsort, vsov) recursively
+    Get-ChildItem $tmpDir -Directory | ForEach-Object {
+        $destSub = Join-Path $pluginDir $_.Name
+        if (-not (Test-Path $destSub)) { New-Item -ItemType Directory -Path $destSub | Out-Null }
+        Copy-Item (Join-Path $_.FullName "*") $destSub -Recurse -Force
+        Write-Host "     $($_.Name)/" -ForegroundColor DarkGray
     }
 
     # Cleanup
