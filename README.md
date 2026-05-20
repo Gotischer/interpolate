@@ -21,7 +21,7 @@ Doble clic y listo. No requiere instalación previa.
 | 🌐 **RIFE NCNN/Vulkan** | Para AMD, Intel Arc, NVIDIA antiguas |
 | 🐢 **MVTools (CPU)** | Fallback universal sin GPU dedicada |
 | 🎬 **Scene Detection** | Polyfill con `PlaneStats` (sin plugins) — RIFE corta limpio en cambios de escena |
-| 🔍 **Cap 1080p + NIS upscale** | RIFE corre como máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP) |
+| 🔍 **Cap 1080p + NIS upscale** | RIFE corre como máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS no es DLSS** — corre en cualquier GPU (NVIDIA, AMD, Intel) |
 | 📺 **Multi-monitor** | Detecta cambios de refresh rate y re-aplica el filtro al mover la ventana |
 | 🌈 **HDR** | Interpolación HDR con preservación BT.2020/PQ/HLG y metadata MaxCLL |
 | 🔧 **Auto-update** | Notificaciones de nuevas versiones |
@@ -123,6 +123,20 @@ Source (cualquier res) ──┐
 - **Cap a 1080p**: garantiza fluidez en GPU normal incluso con sources 4K/UHD.
 - **Multi máximo 5×**: para 24 fps + 120 Hz da exactos 120 fps, sin sobrecargar la GPU con 6×.
 - **NIS upscale**: mpv hace el upscale espacial final al display real con el shader público de NVIDIA — mismo que usa SVP.
+
+### NIS ≠ DLSS
+
+Aclaración importante porque ambos vienen del mismo repo de NVIDIA y se confunden:
+
+| | **NIS** (lo que usamos) | **DLSS Super Resolution** |
+|---|---|---|
+| Tipo | Shader espacial (Lanczos + sharpening) | Red neuronal con Tensor Cores |
+| GPU soportadas | **Cualquiera** — NVIDIA, AMD, Intel, iGPU | **Solo RTX 20xx+** (Tensor Cores) |
+| API | GLSL público, MIT licensed | Streamline SDK, integración por app |
+| Requiere | Compute shaders básicos | `nvngx_dlss.dll`, motion vectors, depth buffer |
+| Integrable en mpv | ✓ (vía libplacebo glsl-shader) | ✗ (necesita per-app pipeline) |
+
+El shader `NVScaler.glsl` que el wizard copia a `portable_config/shaders/` **funciona en cualquier GPU**. La elección entre RTX/AMD/Intel solo afecta al **backend de RIFE** (TensorRT vs NCNN-Vulkan vs OpenVINO), no al upscaler post-RIFE.
 
 ## Multi-Monitor
 
