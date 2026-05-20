@@ -264,9 +264,12 @@ function New-MpvLauncher {
         return $null
     }
 
-    $vsScriptDll = Join-Path $vsDir "VSScript.dll"
+    $vsScriptDll = Join-Path $vsDir "Lib\site-packages\vapoursynth\vsscript.dll"
     if (-not (Test-Path $vsScriptDll)) {
-        $vsScriptDll = Join-Path $vsDir "Lib\site-packages\vapoursynth\vsscript.dll"
+        $vsScriptDll = Join-Path $vsDir "vsscript.dll"
+    }
+    if (-not (Test-Path $vsScriptDll)) {
+        $vsScriptDll = Join-Path $vsDir "VSScript.dll"
     }
     if (-not (Test-Path $vsScriptDll)) {
         Write-Warning "VSScript.dll / vsscript.dll no encontrado en $vsDir"

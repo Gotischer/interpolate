@@ -77,19 +77,20 @@ function Install-VapourSynth {
         if (-not (Test-Path $vsDir)) { New-Item -ItemType Directory -Path $vsDir | Out-Null }
         Expand-Archive -Path $pyZipPath -DestinationPath $vsDir -Force
 
-        # Configure python313._pth to enable site-packages and site.py
-        $pthFile = Join-Path $vsDir "python313._pth"
-        if (Test-Path $pthFile) {
-            Write-Host "     Configurando python313._pth..." -ForegroundColor Gray
+        # Configure python3xx._pth to enable site-packages and site.py
+        $pthFiles = Get-ChildItem $vsDir -Filter "python3*._pth" | Where-Object { $_.Name -match '^python3\d+\._pth$' }
+        foreach ($pthFile in $pthFiles) {
+            $pyVersionName = $pthFile.BaseName
+            Write-Host "     Configurando $($pthFile.Name)..." -ForegroundColor Gray
             $pthContent = @"
-python313.zip
+$pyVersionName.zip
 .
 
 # Uncomment to run site.main() automatically
 import site
 Lib\site-packages
 "@
-            Set-Content $pthFile $pthContent -Encoding ASCII
+            Set-Content $pthFile.FullName $pthContent -Encoding ASCII
         }
 
         # Download get-pip.py
@@ -198,12 +199,30 @@ function Copy-VapourSynthDllsToMpv {
         Write-Warning "mpv.exe esta en ejecucion. Por favor, cierra mpv antes de continuar."
     }
 
-    # 1) Find the python DLL (e.g. python313.dll)
-    $pyDll = Get-ChildItem $VsDir -Filter "python3*.dll" | Where-Object { $_.Name -match '^python3\d+\.dll$' } | Select-Object -First 1
+    # 1) Detect active Python version dynamically
+    $pyVersionString = ""
+    $pyExe = Join-Path $VsDir "python.exe"
+    if (Test-Path $pyExe) {
+        try {
+            $pyVersionString = & $pyExe -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}', end='')"
+        } catch {
+            Write-Warning "No se pudo ejecutar python.exe: $_"
+        }
+    }
+
+    $pyDll = $null
+    if ($pyVersionString) {
+        $pyDll = Get-Item (Join-Path $VsDir "python3$pyVersionString.dll") -EA SilentlyContinue
+    }
+    if (-not $pyDll) {
+        # Fallback: get the highest version DLL
+        $pyDll = Get-ChildItem $VsDir -Filter "python3*.dll" | Where-Object { $_.Name -match '^python3\d+\.dll$' } | Sort-Object Name -Descending | Select-Object -First 1
+    }
     if (-not $pyDll) {
         Write-Warning "No se encontro python3xx.dll en $VsDir"
         return
     }
+    $pyVersionName = $pyDll.BaseName
 
     # 2) Find python3.dll
     $py3Dll = Join-Path $VsDir "python3.dll"
@@ -231,17 +250,21 @@ function Copy-VapourSynthDllsToMpv {
         $libvsDll = Join-Path $VsDir "libvapoursynth.dll"
     }
 
-    # Clean up any old python3xx.dll in mpv folder to avoid conflict (e.g. python314.dll)
+    # Clean up any old python3xx.dll and python3xx._pth in mpv folder to avoid conflict
     try {
         Get-ChildItem $mpvDir -Filter "python3*.dll" | Where-Object { $_.Name -match '^python3\d+\.dll$' -and $_.Name -ne $pyDll.Name } | ForEach-Object {
             Write-Host "     Eliminando DLL obsoleto: $($_.Name)" -ForegroundColor Gray
             Remove-Item $_.FullName -Force -EA Stop
+            $oldPth = Join-Path $mpvDir ($_.BaseName + "._pth")
+            if (Test-Path $oldPth) {
+                Remove-Item $oldPth -Force -EA SilentlyContinue
+            }
         }
     } catch {
-        Write-Warning "No se pudo eliminar el DLL obsoleto: $($_.Exception.Message)"
+        Write-Warning "No se pudo eliminar el DLL o PTH obsoleto: $($_.Exception.Message)"
     }
 
-    # Copy files
+    # Copy files and configure _pth in mpv folder
     try {
         Write-Host "     Copiando $($pyDll.Name) -> $mpvDir" -ForegroundColor Gray
         Copy-Item $pyDll.FullName (Join-Path $mpvDir $pyDll.Name) -Force -ErrorAction Stop
@@ -257,7 +280,29 @@ function Copy-VapourSynthDllsToMpv {
             Copy-Item $libvsDll (Join-Path $mpvDir "libvapoursynth.dll") -Force -ErrorAction Stop
         }
 
-        Write-Host "[OK] DLLs copiados correctamente a la carpeta de mpv" -ForegroundColor Green
+        # 5) Generate python3xx._pth in the mpv directory to allow portable DLL resolution
+        # We calculate the relative path from the mpv folder to the portable VS folder.
+        $mpvDrive = (Get-Item $mpvDir).PSDrive.Name
+        $vsDrive = (Get-Item $VsDir).PSDrive.Name
+        if ($mpvDrive -eq $vsDrive) {
+            $vsParentName = Split-Path (Split-Path $VsDir -Parent) -Leaf
+            $vsLeafName = Split-Path $VsDir -Leaf
+            $vsDirRelative = "..\$vsParentName\$vsLeafName"
+        } else {
+            $vsDirRelative = $VsDir
+        }
+
+        $pthFileMpv = Join-Path $mpvDir "$pyVersionName._pth"
+        Write-Host "     Configurando $pyVersionName._pth en mpv..." -ForegroundColor Gray
+        $pthContentMpv = @"
+$vsDirRelative\$pyVersionName.zip
+$vsDirRelative
+$vsDirRelative\vs-scripts
+$vsDirRelative\Lib\site-packages
+"@
+        Set-Content $pthFileMpv $pthContentMpv -Encoding ASCII
+
+        Write-Host "[OK] DLLs y _pth copiados correctamente a la carpeta de mpv" -ForegroundColor Green
     } catch {
         Write-Error "Error copiando DLLs a la carpeta de mpv: $($_.Exception.Message)"
     }
