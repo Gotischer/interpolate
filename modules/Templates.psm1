@@ -5,6 +5,42 @@
 #  from the wizard configuration. No Python-in-PowerShell escaping issues.
 # =============================================================================
 
+function Save-WizardBackup {
+    <#
+    .SYNOPSIS
+        Copies $Path into <BackupRoot>/wizard-backups/ with a timestamped
+        name, then prunes old entries for the same original filename so
+        the backup directory does not grow unbounded.
+
+        Backups live OUTSIDE scripts/ (mpv loads any .lua/.bak under
+        scripts/ and would crash on incomplete backups).
+    #>
+    param(
+        [string]$Path,
+        [string]$BackupRoot,
+        [int]$KeepLast = 5
+    )
+    if (-not (Test-Path $Path)) { return $null }
+
+    $bakDir = Join-Path $BackupRoot "wizard-backups"
+    if (-not (Test-Path $bakDir)) { New-Item -ItemType Directory -Path $bakDir | Out-Null }
+
+    $name  = Split-Path $Path -Leaf
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $bak   = Join-Path $bakDir "$name.$stamp.bak"
+    Copy-Item $Path $bak -Force
+    Write-Host "     Backup -> wizard-backups/$name.$stamp.bak" -ForegroundColor DarkGray
+
+    # Prune old backups for this filename
+    $pattern = "$name.*.bak"
+    Get-ChildItem $bakDir -Filter $pattern -File -EA SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -Skip $KeepLast |
+        Remove-Item -Force -EA SilentlyContinue
+
+    return $bak
+}
+
 function Get-TemplatesDir {
     # Templates are in the templates/ directory relative to the wizard root
     $moduleDir = Split-Path $PSScriptRoot -Parent
@@ -82,9 +118,7 @@ function New-InterpolationVpy {
         return $dst
     }
     if (Test-Path $dst) {
-        $bak = "$dst.bak"
-        Copy-Item $dst $bak -Force
-        Write-Host "     Backup → $bak" -ForegroundColor DarkGray
+        Save-WizardBackup -Path $dst -BackupRoot $DestDir | Out-Null
     }
 
     # Determine template
@@ -168,13 +202,8 @@ function New-AutoModeLua {
         return $dst
     }
     if (Test-Path $dst) {
-        # Backup outside scripts/ (mpv tries to load .bak files)
-        $bakDir = Join-Path $DestDir "wizard-backups"
-        if (-not (Test-Path $bakDir)) { New-Item -ItemType Directory -Path $bakDir | Out-Null }
-        $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-        $bak   = Join-Path $bakDir "auto_mode.lua.$stamp.bak"
-        Copy-Item $dst $bak -Force
-        Write-Host "     Backup → $bak" -ForegroundColor DarkGray
+        # Backup outside scripts/ (mpv loads anything under scripts/)
+        Save-WizardBackup -Path $dst -BackupRoot $DestDir | Out-Null
     }
 
     $tplDir  = Get-TemplatesDir
