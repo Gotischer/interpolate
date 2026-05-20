@@ -168,7 +168,99 @@ Lib\site-packages
     $pluginDir = Join-Path $vsDir "vs-plugins"
     if (-not (Test-Path $pluginDir)) { New-Item -ItemType Directory -Path $pluginDir | Out-Null }
 
+    # Copy DLLs to the mpv folder to satisfy dynamic loading constraints
+    Copy-VapourSynthDllsToMpv -VsDir $vsDir -MpvExe $Config.MpvExe
+
     return $vsDir
+}
+
+function Copy-VapourSynthDllsToMpv {
+    <#
+    .SYNOPSIS
+        Copies python3xx.dll, python3.dll, and vsscript.dll (as VSScript.dll) to the mpv.exe directory.
+    #>
+    param(
+        [string]$VsDir,
+        [string]$MpvExe
+    )
+
+    if (-not $MpvExe -or -not (Test-Path $MpvExe)) {
+        Write-Warning "mpv.exe no configurado o no encontrado. No se copiaron los DLLs."
+        return
+    }
+
+    $mpvDir = Split-Path $MpvExe -Parent
+    Write-Host "`n===> Copiando DLLs de VapourSynth a la carpeta de mpv..." -ForegroundColor Cyan
+
+    # Check if mpv is running
+    $runningMpv = Get-Process -Name "mpv" -ErrorAction SilentlyContinue
+    if ($runningMpv) {
+        Write-Warning "mpv.exe esta en ejecucion. Por favor, cierra mpv antes de continuar."
+    }
+
+    # 1) Find the python DLL (e.g. python313.dll)
+    $pyDll = Get-ChildItem $VsDir -Filter "python3*.dll" | Where-Object { $_.Name -match '^python3\d+\.dll$' } | Select-Object -First 1
+    if (-not $pyDll) {
+        Write-Warning "No se encontro python3xx.dll en $VsDir"
+        return
+    }
+
+    # 2) Find python3.dll
+    $py3Dll = Join-Path $VsDir "python3.dll"
+    if (-not (Test-Path $py3Dll)) {
+        Write-Warning "No se encontro python3.dll en $VsDir"
+        return
+    }
+
+    # 3) Find vsscript.dll / VSScript.dll (prefer site-packages version first)
+    $vsscriptDll = Join-Path $VsDir "Lib\site-packages\vapoursynth\vsscript.dll"
+    if (-not (Test-Path $vsscriptDll)) {
+        $vsscriptDll = Join-Path $VsDir "vsscript.dll"
+    }
+    if (-not (Test-Path $vsscriptDll)) {
+        $vsscriptDll = Join-Path $VsDir "VSScript.dll"
+    }
+    if (-not (Test-Path $vsscriptDll)) {
+        Write-Warning "No se encontro vsscript.dll en $VsDir"
+        return
+    }
+
+    # 4) Find libvapoursynth.dll (core library for R76+)
+    $libvsDll = Join-Path $VsDir "Lib\site-packages\vapoursynth\libvapoursynth.dll"
+    if (-not (Test-Path $libvsDll)) {
+        $libvsDll = Join-Path $VsDir "libvapoursynth.dll"
+    }
+
+    # Clean up any old python3xx.dll in mpv folder to avoid conflict (e.g. python314.dll)
+    try {
+        Get-ChildItem $mpvDir -Filter "python3*.dll" | Where-Object { $_.Name -match '^python3\d+\.dll$' -and $_.Name -ne $pyDll.Name } | ForEach-Object {
+            Write-Host "     Eliminando DLL obsoleto: $($_.Name)" -ForegroundColor Gray
+            Remove-Item $_.FullName -Force -EA Stop
+        }
+    } catch {
+        Write-Warning "No se pudo eliminar el DLL obsoleto: $($_.Exception.Message)"
+    }
+
+    # Copy files
+    try {
+        Write-Host "     Copiando $($pyDll.Name) -> $mpvDir" -ForegroundColor Gray
+        Copy-Item $pyDll.FullName (Join-Path $mpvDir $pyDll.Name) -Force -ErrorAction Stop
+
+        Write-Host "     Copiando python3.dll -> $mpvDir" -ForegroundColor Gray
+        Copy-Item $py3Dll (Join-Path $mpvDir "python3.dll") -Force -ErrorAction Stop
+
+        Write-Host "     Copiando vsscript.dll (como VSScript.dll) -> $mpvDir" -ForegroundColor Gray
+        Copy-Item $vsscriptDll (Join-Path $mpvDir "VSScript.dll") -Force -ErrorAction Stop
+
+        if (Test-Path $libvsDll) {
+            Write-Host "     Copiando libvapoursynth.dll -> $mpvDir" -ForegroundColor Gray
+            Copy-Item $libvsDll (Join-Path $mpvDir "libvapoursynth.dll") -Force -ErrorAction Stop
+        }
+
+        Write-Host "[OK] DLLs copiados correctamente a la carpeta de mpv" -ForegroundColor Green
+    } catch {
+        Write-Error "Error copiando DLLs a la carpeta de mpv: $($_.Exception.Message)"
+    }
 }
 
 function Test-VapourSynthInstall {
@@ -218,4 +310,4 @@ function Test-VapourSynthInstall {
     return $status
 }
 
-Export-ModuleMember -Function Install-VapourSynth, Test-VapourSynthInstall
+Export-ModuleMember -Function Install-VapourSynth, Test-VapourSynthInstall, Copy-VapourSynthDllsToMpv
