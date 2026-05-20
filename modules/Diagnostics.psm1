@@ -92,6 +92,25 @@ function Invoke-Diagnostics {
         Write-Host '  [6/7] Modelos - (requiere VapourSynth)' -ForegroundColor DarkGray
     }
 
+    # 6b) Persistent env vars left by older install scripts
+    #     Old install_interp-2.ps1 used to call setx/SetEnvironmentVariable for
+    #     VSSCRIPT_PATH and PYTHONPATH at User scope, often pointing to a
+    #     directory (or a non-existent DLL path). mpv reads VSSCRIPT_PATH on
+    #     Windows and does LoadLibrary() on it directly, so a bad value makes
+    #     every direct mpv.exe launch fail with 0x7e even when mpv-vs.bat would
+    #     have worked. Detect and offer to clean up.
+    Write-Host '  [extra] Variables de entorno persistentes' -ForegroundColor Cyan
+    $envIssues = Get-StaleVsEnvVars
+    if ($envIssues.Count -eq 0) {
+        Write-Host '     OK: VSSCRIPT_PATH / PYTHONPATH limpios' -ForegroundColor Green
+    } else {
+        foreach ($e in $envIssues) {
+            Write-Host ('     WARN: ' + $e.Name + ' (' + $e.Scope + ') = ' + $e.Value) -ForegroundColor Yellow
+            Write-Host ('            ' + $e.Reason) -ForegroundColor DarkGray
+        }
+        $issues += 'Variables de entorno persistentes mal configuradas. Ejecuta Reparar para limpiarlas.'
+    }
+
     # 7) mpv config files
     Write-Host '  [7/7] Archivos de config' -ForegroundColor Cyan
     $vpyPath = Join-Path $Config.MpvConfigDir 'interpolation.vpy'
@@ -138,6 +157,53 @@ function Invoke-Diagnostics {
     }
 }
 
+function Get-StaleVsEnvVars {
+    <#
+    .SYNOPSIS
+        Returns a list of persistent env vars (User/Machine scope) that look
+        like leftovers from old install scripts and are known to break direct
+        mpv.exe launches. Pure detection; does not modify the environment.
+    .OUTPUTS
+        Array of @{ Name; Scope; Value; Reason } — empty if everything is clean.
+    #>
+    $bad = @()
+    foreach ($scope in 'User','Machine') {
+        $vs = [System.Environment]::GetEnvironmentVariable('VSSCRIPT_PATH', $scope)
+        if ($vs) {
+            # Any persistent VSSCRIPT_PATH is suspect: the canonical setup uses
+            # mpv-vs.bat which sets it per-session. A persistent value will
+            # leak into every direct mpv.exe launch.
+            $reason = if (-not (Test-Path $vs)) {
+                'Apunta a una ruta inexistente'
+            } elseif ((Get-Item $vs -EA SilentlyContinue).PSIsContainer) {
+                'Apunta a un directorio (mpv espera la DLL completa)'
+            } else {
+                'Variable persistente: mejor dejar que mpv-vs.bat la configure por sesion'
+            }
+            $bad += @{ Name = 'VSSCRIPT_PATH'; Scope = $scope; Value = $vs; Reason = $reason }
+        }
+        $pp = [System.Environment]::GetEnvironmentVariable('PYTHONPATH', $scope)
+        if ($pp -and $pp -match 'vapoursynth') {
+            $bad += @{ Name = 'PYTHONPATH'; Scope = $scope; Value = $pp;
+                       Reason = 'PYTHONPATH global apuntando a VS portable contamina otros Python instalados' }
+        }
+    }
+    return ,$bad
+}
+
+function Clear-StaleVsEnvVars {
+    <#
+    .SYNOPSIS
+        Removes the persistent env vars flagged by Get-StaleVsEnvVars.
+    #>
+    $cleared = @()
+    foreach ($e in (Get-StaleVsEnvVars)) {
+        [System.Environment]::SetEnvironmentVariable($e.Name, $null, $e.Scope)
+        $cleared += "$($e.Name) ($($e.Scope))"
+    }
+    return $cleared
+}
+
 function Invoke-QuickCheck {
     param([hashtable]$Config, [hashtable]$GPUEnv)
 
@@ -157,4 +223,5 @@ function Invoke-QuickCheck {
     return $true
 }
 
-Export-ModuleMember -Function Invoke-Diagnostics, Invoke-QuickCheck
+Export-ModuleMember -Function Invoke-Diagnostics, Invoke-QuickCheck, `
+    Get-StaleVsEnvVars, Clear-StaleVsEnvVars

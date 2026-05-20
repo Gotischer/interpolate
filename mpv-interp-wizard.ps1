@@ -220,6 +220,7 @@ function Invoke-Repair {
         'Regenerar auto_mode.lua',
         'Re-parchear vsmlrt.py',
         'Reinstalar modelos RIFE',
+        'Limpiar variables de entorno persistentes (VSSCRIPT_PATH, PYTHONPATH)',
         'Regenerar TODO',
         'Volver'
     )
@@ -259,6 +260,23 @@ function Invoke-Repair {
             Install-RIFEModels -Config $config -VsDir $vsDir -Models $modelsToInstall
         }
         4 {
+            $stale = Get-StaleVsEnvVars
+            if ($stale.Count -eq 0) {
+                Write-Host '  No hay variables de entorno persistentes para limpiar.' -ForegroundColor Green
+            } else {
+                foreach ($e in $stale) {
+                    Write-Host ('  ' + $e.Name + ' (' + $e.Scope + ') = ' + $e.Value) -ForegroundColor Yellow
+                    Write-Host ('    ' + $e.Reason) -ForegroundColor DarkGray
+                }
+                $cleared = Clear-StaleVsEnvVars
+                Write-Host ''
+                Write-Host ('  Borradas: ' + ($cleared -join ', ')) -ForegroundColor Green
+                Write-Host '  Importante: los procesos ya abiertos (Explorer, terminales)' -ForegroundColor Yellow
+                Write-Host '  todavia heredan el valor viejo. Reinicia Explorer o cierra sesion' -ForegroundColor Yellow
+                Write-Host '  para que el cambio se propague a nuevos lanzamientos de mpv.' -ForegroundColor Yellow
+            }
+        }
+        5 {
             New-InterpolationVpy -BackendType $backendType -Profile $profile -Config $config `
                 -DestDir $config.MpvConfigDir -Force -WizardVersion $Global:WizardVersion `
                 -VpyTemplateVersion $Global:VpyTemplateVersion
@@ -272,8 +290,13 @@ function Invoke-Repair {
             $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
             $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
             if (Test-Path $vsmlrtPy) { Invoke-VsmlrtPatch -Path $vsmlrtPy }
+
+            $cleared = Clear-StaleVsEnvVars
+            if ($cleared.Count -gt 0) {
+                Write-Host ('  Variables persistentes limpiadas: ' + ($cleared -join ', ')) -ForegroundColor Green
+            }
         }
-        5 { return }
+        6 { return }
         default { return }
     }
     Wait-Continue
