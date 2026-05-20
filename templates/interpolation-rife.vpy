@@ -113,19 +113,19 @@ else:
     # RIFE with sc=True handles scene detection internally.
     # No external SCDetect plugin needed (MiscFilters not in VS R73 portable).
 
-    # ---- Downscale source->display antes de RIFE ---------------------------
-    # Si el source es mas grande que el display, RIFE en res nativa de pantalla
-    # es hasta 4x mas barato (a 4K->1080p) y la perdida visual es nula (el
-    # display fisico no puede mostrar mas pixels). mpv hace cualquier resize
-    # residual con libplacebo en el VO, que es mejor que cualquier resize VS.
-    # display_res es inyectado por mpv como lista [width, height].
-    try:
-        dw, dh = int(display_res[0]), int(display_res[1])
-    except Exception:
-        dw = dh = 0
+    # ---- Cap de resolucion antes de RIFE -----------------------------------
+    # Cap fijo (no depende de display_res, que mpv solo inyecta una vez al
+    # cargar el filtro: si mueves la ventana a un monitor 4K no se reevalua).
+    # 1920x1080 mantiene RIFE holgado @60Hz incluso con sources 4K. El upscale
+    # al display real lo hace mpv con NVScaler/NIS (ver mpv.conf, el shader
+    # vive en templates/shaders/NVScaler.glsl y lo copia el wizard). NIS es
+    # el mismo upscaler espacial publico de NVIDIA que usa SVP — sin perdida
+    # visual perceptible respecto a hacer RIFE en res nativa del display.
+    MAX_RIFE_W = 1920
+    MAX_RIFE_H = 1080
     target_w, target_h = clip.width, clip.height
-    if dw > 0 and dh > 0 and (clip.width > dw or clip.height > dh):
-        ratio = min(dw / clip.width, dh / clip.height)
+    if clip.width > MAX_RIFE_W or clip.height > MAX_RIFE_H:
+        ratio = min(MAX_RIFE_W / clip.width, MAX_RIFE_H / clip.height)
         target_w = (int(clip.width  * ratio) // 2) * 2  # mod2 para chroma
         target_h = (int(clip.height * ratio) // 2) * 2
 

@@ -260,6 +260,40 @@ function New-SetDisplayHz {
     return $dst
 }
 
+function Install-NisShader {
+    <#
+    .SYNOPSIS
+        Copies NVScaler.glsl (NVIDIA Image Scaling v1.0.2) from templates/
+        into <DestDir>/shaders/. Used for high-quality upscale of the
+        VS filter output (which we cap at 1080p) to the actual display
+        resolution. Same spatial upscaler SVP uses.
+    .DESCRIPTION
+        The shader is a public release under MIT from NVIDIA, ported to
+        mpv's libplacebo hook format by agyild. It activates automatically
+        only when OUTPUT > LUMA (i.e. when upscale is actually needed).
+    #>
+    param(
+        [string]$DestDir,
+        [switch]$Force
+    )
+    $tplDir = Get-TemplatesDir
+    $src    = Join-Path $tplDir "shaders\NVScaler.glsl"
+    if (-not (Test-Path $src)) {
+        Write-Warning "NVScaler.glsl no encontrado en templates/shaders/, omitiendo upscaler ML"
+        return $null
+    }
+    $shadersDir = Join-Path $DestDir "shaders"
+    if (-not (Test-Path $shadersDir)) { New-Item -ItemType Directory -Path $shadersDir -Force | Out-Null }
+    $dst = Join-Path $shadersDir "NVScaler.glsl"
+    if ((Test-Path $dst) -and -not $Force) {
+        Write-Host "     NVScaler.glsl ya existe" -ForegroundColor Gray
+        return $dst
+    }
+    Copy-Item $src $dst -Force
+    Write-Host "[OK] NVScaler.glsl copiado (upscaler NIS para post-RIFE)" -ForegroundColor Green
+    return $dst
+}
+
 function New-MpvLauncher {
     <#
     .SYNOPSIS
@@ -330,4 +364,4 @@ rem Launch mpv with all arguments forwarded
 }
 
 Export-ModuleMember -Function New-InterpolationVpy, New-AutoModeLua, New-SetDisplayHz, `
-    New-MpvLauncher, Build-BackendExpression, Get-TemplatesDir
+    New-MpvLauncher, Install-NisShader, Build-BackendExpression, Get-TemplatesDir

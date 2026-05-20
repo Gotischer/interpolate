@@ -188,7 +188,11 @@ function Invoke-Install {
     New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
         -WizardVersion $Global:WizardVersion -SetHzTemplateVersion $Global:SetHzTemplateVersion
 
-    # 7b) Generate mpv-vs.bat launcher (sets VSSCRIPT_PATH for portable VS)
+    # 7b) Install NIS shader for high-quality upscale post-RIFE (4K display
+    # support without paying the RIFE-at-4K cost)
+    Install-NisShader -DestDir $config.MpvConfigDir -Force | Out-Null
+
+    # 7c) Generate mpv-vs.bat launcher (sets VSSCRIPT_PATH for portable VS)
     New-MpvLauncher -Config $config -Force
 
     # 8) Update config with installed versions
@@ -286,6 +290,7 @@ function Invoke-Repair {
                 -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
             New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
                 -WizardVersion $Global:WizardVersion -SetHzTemplateVersion $Global:SetHzTemplateVersion
+            Install-NisShader -DestDir $config.MpvConfigDir -Force | Out-Null
 
             $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
             $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
