@@ -363,6 +363,34 @@ function Copy-VapourSynthDllsToMpv {
             Copy-Item $libvsDll (Join-Path $mpvDir "libvapoursynth.dll") -Force -ErrorAction Stop
         }
 
+        # 5) MSVC runtime DLLs. VSScript.dll esta linkeada contra MSVCP140 +
+        # VCRUNTIME140 + VCRUNTIME140_1. Si mpv.exe es un build sin ellos
+        # bundleados (como el shinchiro de Abril 2026) y el sistema no los
+        # tiene globalmente, LoadLibrary(VSScript.dll) retorna 0 con error
+        # 126 (ERROR_MOD_NOT_FOUND) que se traduce a mpv como un opaco
+        # "Could not initialize VapourSynth scripting" SIN que el .vpy
+        # llegue a ejecutarse (asi que el crash logger del .vpy tampoco
+        # corre). Los copiamos desde la raiz de vsDir (el portable de VS
+        # los trae bundleados).
+        $msvcRuntimes = @(
+            'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll',
+            'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll',
+            'vcruntime140.dll', 'vcruntime140_1.dll', 'vcruntime140_threads.dll',
+            'concrt140.dll', 'vccorlib140.dll'
+        )
+        foreach ($rt in $msvcRuntimes) {
+            $src = Join-Path $VsDir $rt
+            if (-not (Test-Path $src)) { continue }
+            $dst = Join-Path $mpvDir $rt
+            # Solo copiar si no existe ya, o si existe pero es de version distinta.
+            # mpv builds suelen traer su propia version, y reemplazarla puede
+            # romper mpv. Si ya existe uno, lo dejamos.
+            if (-not (Test-Path $dst)) {
+                Copy-Item $src $dst -Force -ErrorAction Stop
+                Write-Host "     Copiando $rt (MSVC runtime) -> $mpvDir" -ForegroundColor Gray
+            }
+        }
+
         # 5) Generate python3xx._pth in the mpv directory to allow portable DLL resolution
         # We calculate the relative path from the mpv folder to the portable VS folder.
         $mpvDrive = (Get-Item $mpvDir).PSDrive.Name
