@@ -70,6 +70,13 @@ function Install-VapourSynth {
         $pyUrl = "https://www.python.org/ftp/python/$pyVersion/$pyZipName"
 
         Write-Host "     Descargando Python $pyVersion embedded..." -ForegroundColor Gray
+        # El embed zip de Python son ~10-15 MB. Cualquier cosa menor a 5 MB es
+        # un download interrumpido o un redirect HTML, no el zip real.
+        $cachedPyZip = Join-Path $Config.BaseDir $pyZipName
+        if ((Test-Path $cachedPyZip) -and (Get-Item $cachedPyZip).Length -lt 5MB) {
+            Write-Host "     Cache de $pyZipName invalido, redescargando..." -ForegroundColor Yellow
+            Remove-Item $cachedPyZip -Force -EA SilentlyContinue
+        }
         $pyZipPath = Invoke-Download -FileName $pyZipName -Url $pyUrl -BaseDir $Config.BaseDir `
             -LocalBundleDir $Config.LocalBundleDir
 
@@ -144,16 +151,45 @@ Lib\site-packages
         }
     }
 
-    $zipUrl = if ($zipAsset) { $zipAsset.Url }
-              else { "https://github.com/$repo/releases/download/$tag/$zipName" }
+    $zipUrl  = if ($zipAsset) { $zipAsset.Url }
+               else { "https://github.com/$repo/releases/download/$tag/$zipName" }
+    $zipSize = if ($zipAsset -and $zipAsset.Size) { [long]$zipAsset.Size } else { 0 }
+
+    # Si hay un .zip cacheado de un run anterior con el asset incorrecto (el
+    # wrapper de 2 KB), Invoke-Download lo reusaria por nombre sin validar.
+    # Forzamos un re-download si el tamano local es claramente menor que un
+    # portable real (umbral conservador 5 MB; el R76 real son ~15 MB).
+    $cachedZip = Join-Path $Config.BaseDir $zipName
+    if (Test-Path $cachedZip) {
+        $cachedSize = (Get-Item $cachedZip).Length
+        if ($cachedSize -lt 5MB -or ($zipSize -gt 0 -and $cachedSize -ne $zipSize)) {
+            Write-Host "     Cache de $zipName invalido ($cachedSize bytes), redescargando..." -ForegroundColor Yellow
+            Remove-Item $cachedZip -Force -EA SilentlyContinue
+        }
+    }
 
     $zipPath = Invoke-Download -FileName $zipName -Url $zipUrl -BaseDir $Config.BaseDir `
-        -LocalBundleDir $Config.LocalBundleDir
+        -LocalBundleDir $Config.LocalBundleDir -ExpectedSize $zipSize
 
     # 3) Extract VapourSynth portable zip
     Write-Host "     Extrayendo VapourSynth..." -ForegroundColor Gray
     if (-not (Test-Path $vsDir)) { New-Item -ItemType Directory -Path $vsDir | Out-Null }
     Expand-Archive -Path $zipPath -DestinationPath $vsDir -Force
+
+    # Sanity check: el portable real trae siempre Lib/, wheel/ y VSPipe (en
+    # Scripts/ desde R74). Si falta alguno, el zip fue erroneo: borramos el
+    # zip cacheado y abortamos con un mensaje claro en lugar de morir 50 lineas
+    # despues con un PathNotFound oscuro de wheel/.
+    if ($tagNum -ge 74) {
+        $expectedDirs = @("Lib", "wheel")
+        $missing = $expectedDirs | Where-Object { -not (Test-Path (Join-Path $vsDir $_)) }
+        if ($missing.Count -gt 0) {
+            Remove-Item $zipPath -Force -EA SilentlyContinue
+            throw ("Zip de VapourSynth corrupto o incompleto (falta: " + ($missing -join ", ") +
+                   "). Se borro la copia cacheada (" + $zipPath + "). " +
+                   "Volve a ejecutar el wizard para descargarlo de cero.")
+        }
+    }
 
     # Verify extraction structure (legacy folder restructuring only for <R74)
     if ($tagNum -lt 74) {
