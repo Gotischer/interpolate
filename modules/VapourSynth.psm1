@@ -417,6 +417,25 @@ $vsDirRelative\Lib\site-packages
     } catch {
         Write-Error "Error copiando DLLs a la carpeta de mpv: $($_.Exception.Message)"
     }
+
+    # Verificar que msvcp140.dll este disponible para mpv. VSScript.dll
+    # depende de el. Si no esta en el folder de mpv NI en System32, hay que
+    # instalar el VC++ Redistributable. Sin esto, LoadLibrary(VSScript.dll)
+    # falla con ERROR_MOD_NOT_FOUND y mpv reporta un opaco "Could not
+    # initialize VapourSynth scripting" sin que el .vpy llegue a correr.
+    $msvcpInMpv = Test-Path (Join-Path $mpvDir "msvcp140.dll")
+    $msvcpInSys = Test-Path "$env:SystemRoot\System32\msvcp140.dll"
+    if (-not $msvcpInMpv -and -not $msvcpInSys) {
+        Write-Host ""
+        Write-Host "[!!] FALTA: msvcp140.dll (Microsoft Visual C++ Runtime)" -ForegroundColor Yellow
+        Write-Host "     VSScript.dll lo necesita para cargarse. Sin esta libreria mpv NO" -ForegroundColor Yellow
+        Write-Host "     puede inicializar VapourSynth y la interpolacion no funciona." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "     Instala el Visual C++ Redistributable (instalador oficial, gratis, 14 MB):" -ForegroundColor Cyan
+        Write-Host "       https://aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "     Despues de instalar, re-ejecuta el wizard o simplemente abre mpv." -ForegroundColor Cyan
+    }
 }
 
 function Test-VapourSynthInstall {
