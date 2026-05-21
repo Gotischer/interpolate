@@ -7,9 +7,33 @@
 # =============================================================================
 import math
 import os
+import sys
+import traceback
 import vapoursynth as vs
 
 core = vs.core
+
+# mpv solo logea "Could not initialize VapourSynth scripting" sin el traceback
+# Python real. Capturamos cualquier excepcion no manejada en este script y la
+# escribimos a un archivo junto al .vpy para que el diagnostico pueda leerlo.
+def _install_crash_logger():
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "interpolation.error.log")
+    def _hook(exc_type, exc_value, exc_tb):
+        try:
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write("interpolation.vpy crashed during evaluation\n")
+                f.write("Python: " + sys.version.replace("\n", " ") + "\n")
+                f.write("VapourSynth: " + str(vs.__version__) + "\n")
+                f.write("sys.path:\n")
+                for p in sys.path: f.write("  " + p + "\n")
+                f.write("\n--- Traceback ---\n")
+                traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+        except Exception:
+            pass
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+    sys.excepthook = _hook
+
+_install_crash_logger()
 
 # ---- Explicit plugin loading -----------------------------------------------
 # vs-mlrt plugins (vsov/vsort/vsncnn/vstrt/vstrt_rtx) currently use API3, which
