@@ -279,6 +279,15 @@ function Test-VsMlrtInstall {
     <#
     .SYNOPSIS
         Checks if vs-mlrt is properly installed.
+    .DESCRIPTION
+        vs-mlrt ships in varias flavors:
+          - cuda        => trtexec.exe + vstrt.dll + vstrt_rtx.dll + vsncnn.dll
+          - generic-gpu => vsncnn.dll + vsov.dll + vsort.dll (sin TRT, sin CUDA)
+          - cpu         => vsov.dll + vsort.dll (subset)
+        El chequeo anterior solo buscaba trtexec/vstrt y por eso un install
+        NCNN_VK (Pascal/AMD/Intel) daba "FAIL No instalado" aunque tuviera
+        vsncnn.dll y los modelos. Ahora consideramos instalado si EXISTE
+        cualquier plugin DLL conocido, y guardamos cuales encontramos.
     #>
     param([string]$VsDir)
     $pluginDir = Join-Path $VsDir "vs-plugins"
@@ -286,18 +295,29 @@ function Test-VsMlrtInstall {
     $status = @{
         Installed     = $false
         TrtExec       = $false
+        Backends      = @()
         ModelsDir     = $null
         ModelCount    = 0
         VsmlrtPy      = $null
         VsmlrtPatched = $false
     }
 
-    # Check for trtexec.exe (TensorRT) or vstrt.dll
-    $trt = Get-ChildItem $pluginDir -Filter "trtexec.exe" -Recurse -EA SilentlyContinue | Select-Object -First 1
-    $vstrt = Get-ChildItem $pluginDir -Filter "vstrt.dll" -Recurse -EA SilentlyContinue | Select-Object -First 1
+    # Buscamos cualquier plugin de vs-mlrt (TRT / NCNN / OV / ORT)
+    $trt      = Get-ChildItem $pluginDir -Filter "trtexec.exe"     -Recurse -EA SilentlyContinue | Select-Object -First 1
+    $vstrt    = Get-ChildItem $pluginDir -Filter "vstrt.dll"       -Recurse -EA SilentlyContinue | Select-Object -First 1
+    $vstrtrtx = Get-ChildItem $pluginDir -Filter "vstrt_rtx.dll"   -Recurse -EA SilentlyContinue | Select-Object -First 1
+    $vsncnn   = Get-ChildItem $pluginDir -Filter "vsncnn.dll"      -Recurse -EA SilentlyContinue | Select-Object -First 1
+    $vsov     = Get-ChildItem $pluginDir -Filter "vsov.dll"        -Recurse -EA SilentlyContinue | Select-Object -First 1
+    $vsort    = Get-ChildItem $pluginDir -Filter "vsort.dll"       -Recurse -EA SilentlyContinue | Select-Object -First 1
 
-    if ($trt -or $vstrt) { $status.Installed = $true }
-    if ($trt)  { $status.TrtExec = $true }
+    if ($trt)      { $status.TrtExec = $true }
+    if ($vstrt)    { $status.Backends += 'TRT' }
+    if ($vstrtrtx) { $status.Backends += 'TRT_RTX' }
+    if ($vsncnn)   { $status.Backends += 'NCNN' }
+    if ($vsov)     { $status.Backends += 'OV' }
+    if ($vsort)    { $status.Backends += 'ORT' }
+
+    if ($status.Backends.Count -gt 0) { $status.Installed = $true }
 
     # Check models
     $modelsDir = Join-Path $pluginDir "models"

@@ -57,7 +57,10 @@ function Invoke-Diagnostics {
         $mlrtStatus = Test-VsMlrtInstall -VsDir $vsStatus.Path
         $results['vs-mlrt'] = $mlrtStatus
         if ($mlrtStatus.Installed) {
-            Write-Host '     OK: Instalado' -ForegroundColor Green
+            $backendList = if ($mlrtStatus.Backends -and $mlrtStatus.Backends.Count -gt 0) {
+                ' (' + ($mlrtStatus.Backends -join ', ') + ')'
+            } else { '' }
+            Write-Host ('     OK: Instalado' + $backendList) -ForegroundColor Green
             if ($mlrtStatus.TrtExec) { Write-Host '     OK: trtexec.exe presente' -ForegroundColor Green }
         } else {
             Write-Host '     FAIL: No instalado' -ForegroundColor Red
