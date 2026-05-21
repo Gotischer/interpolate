@@ -5,6 +5,25 @@
 #  from the wizard configuration. No Python-in-PowerShell escaping issues.
 # =============================================================================
 
+function Write-Utf8NoBom {
+    <#
+    .SYNOPSIS
+        Escribe texto a un archivo como UTF-8 sin BOM.
+    .DESCRIPTION
+        Set-Content -Encoding UTF8 en PowerShell 5.1 escribe UTF-8 CON BOM
+        siempre. Eso rompe archivos que el consumidor no espera BOM:
+          - interpolation.vpy: Python tira SyntaxError "invalid character '»'"
+            cuando lee un .vpy que empieza con EF BB BF, porque vsscript pasa
+            el contenido por PyRun_String que no auto-skipea el BOM.
+          - auto_mode.lua: algunos parsers de Lua tampoco lo manejan.
+          - set_display_hz.ps1: ironicamente esto SI necesita BOM en PS 5.1.
+        Esta funcion siempre escribe SIN BOM. Usar Set-Content -Encoding UTF8
+        cuando explicitamente quieras BOM (solo para .ps1 en PS 5.1).
+    #>
+    param([string]$Path, [string]$Content)
+    [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding $false))
+}
+
 function Save-WizardBackup {
     <#
     .SYNOPSIS
@@ -167,7 +186,7 @@ function New-InterpolationVpy {
         $content = $content -replace '{{WIZARD_VERSION}}', $WizardVersion
     }
 
-    Set-Content $dst $content -Encoding UTF8
+    Write-Utf8NoBom -Path $dst -Content $content
     Write-Host "[OK] interpolation.vpy creado en $dst" -ForegroundColor Green
     Write-Host "     Backend: $BackendType" -ForegroundColor DarkGray
     if ($BackendType -ne "MVTOOLS") {
@@ -220,7 +239,7 @@ function New-AutoModeLua {
     $content = $content -replace '{{CONCURRENT_FRAMES}}', $Concurrent
     $content = $content -replace '{{HDR_INTERPOLATION}}', $hdrInterp
 
-    Set-Content $dst $content -Encoding UTF8
+    Write-Utf8NoBom -Path $dst -Content $content
     Write-Host "[OK] auto_mode.lua creado" -ForegroundColor Green
     return $dst
 }
@@ -255,7 +274,7 @@ function New-SetDisplayHz {
     $content = $content -replace '{{WIZARD_VERSION}}', $WizardVersion
     $content = $content -replace '{{DISPLAY_DEVICE}}', $display
 
-    Set-Content $dst $content -Encoding UTF8
+    Write-Utf8NoBom -Path $dst -Content $content
     Write-Host "[OK] set_display_hz.ps1 creado" -ForegroundColor Green
     return $dst
 }
