@@ -95,8 +95,80 @@ function Install-VsMlrt {
     # Cleanup
     Remove-Item $tmpDir -Recurse -Force -EA SilentlyContinue
 
+    # Install vsmlrt.py: vive en un asset separado (scripts.<tag>.7z) que NO
+    # esta en el bundle de plugins. Sin este archivo el .vpy revienta con
+    # "ModuleNotFoundError: No module named 'vsmlrt'". El diagnostico marca
+    # "vsmlrt.py no encontrado" y "Re-parchear" no hace nada porque
+    # Invoke-VsmlrtPatch silenciosamente retorna 0 si el archivo no existe.
+    Install-VsmlrtScripts -Config $Config -VsDir $VsDir -Release $rel | Out-Null
+
     Write-Host "[OK] vs-mlrt $($rel.Tag) instalado ($BackendType)" -ForegroundColor Green
     return $rel.Tag
+}
+
+function Install-VsmlrtScripts {
+    <#
+    .SYNOPSIS
+        Downloads and installs the vs-mlrt scripts asset (vsmlrt.py and
+        friends) into <vsDir>/Lib/site-packages/.
+    .DESCRIPTION
+        The vs-mlrt GitHub release ships the python wrapper (vsmlrt.py) as a
+        separate ~17 KB asset named "scripts.<tag>.7z", NOT inside the main
+        plugin bundle. This function handles that asset specifically.
+    #>
+    param(
+        [hashtable]$Config,
+        [string]$VsDir,
+        $Release = $null
+    )
+    if (-not $Release) {
+        $Release = Get-LatestGithubRelease -Repo "AmusementClub/vs-mlrt"
+    }
+    if (-not $Release) {
+        throw "No se pudo obtener release de vs-mlrt para descargar scripts"
+    }
+
+    $sitePkg = Join-Path $VsDir "Lib\site-packages"
+    if (-not (Test-Path $sitePkg)) { New-Item -ItemType Directory -Path $sitePkg -Force | Out-Null }
+
+    # El asset se llama "scripts.<tag>.7z" (ej. scripts.v15.16.7z).
+    $scriptsAsset = $Release.Assets |
+        Where-Object { $_.Name -match '^scripts\..*\.7z$' } |
+        Select-Object -First 1
+
+    if (-not $scriptsAsset) {
+        Write-Host "[!!] No encontre asset scripts.*.7z en vs-mlrt $($Release.Tag)" -ForegroundColor Yellow
+        Write-Host "     vsmlrt.py no se instalara automaticamente." -ForegroundColor DarkGray
+        return $null
+    }
+
+    Write-Host "     Descargando vsmlrt.py ($($scriptsAsset.Name))..." -ForegroundColor Gray
+    $scriptsArchive = Invoke-Download -FileName $scriptsAsset.Name -Url $scriptsAsset.Url `
+        -BaseDir $Config.BaseDir -LocalBundleDir $Config.LocalBundleDir `
+        -ExpectedSize $scriptsAsset.Size
+
+    $tmpDir = Join-Path $Config.BaseDir "vsmlrt-scripts-tmp"
+    if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
+    Expand-7zArchive -Archive $scriptsArchive -DestDir $tmpDir -BaseDir $Config.BaseDir
+
+    # Copiamos cualquier .py al site-packages (vsmlrt.py es el principal pero
+    # algunos releases incluyen helpers extra).
+    $pyFiles = Get-ChildItem $tmpDir -Filter "*.py" -Recurse -EA SilentlyContinue
+    foreach ($f in $pyFiles) {
+        Copy-Item $f.FullName (Join-Path $sitePkg $f.Name) -Force
+        Write-Host "     site-packages/$($f.Name)" -ForegroundColor DarkGray
+    }
+
+    Remove-Item $tmpDir -Recurse -Force -EA SilentlyContinue
+
+    $vsmlrtPy = Join-Path $sitePkg "vsmlrt.py"
+    if (Test-Path $vsmlrtPy) {
+        Write-Host "[OK] vsmlrt.py instalado" -ForegroundColor Green
+        return $vsmlrtPy
+    } else {
+        Write-Host "[!!] scripts.7z extraido pero vsmlrt.py no aparecio" -ForegroundColor Yellow
+        return $null
+    }
 }
 
 function Install-RIFEModels {
@@ -212,4 +284,4 @@ function Test-VsMlrtInstall {
     return $status
 }
 
-Export-ModuleMember -Function Install-VsMlrt, Install-RIFEModels, Test-VsMlrtInstall
+Export-ModuleMember -Function Install-VsMlrt, Install-VsmlrtScripts, Install-RIFEModels, Test-VsMlrtInstall

@@ -18,7 +18,7 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.2"
+$Global:WizardVersion       = "2.1.3"
 $Global:VpyTemplateVersion  = 1
 $Global:LuaTemplateVersion  = 1
 $Global:SetHzTemplateVersion = 1
@@ -252,10 +252,19 @@ function Invoke-Repair {
         2 {
             $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
             $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
+            # Si el archivo no existe (instalaciones previas a v2.1.3 nunca
+            # bajaban el asset scripts.<tag>.7z por separado), lo descargamos
+            # antes de intentar parchearlo en lugar de salir con "no hace
+            # nada" que era lo que veia el usuario.
+            if (-not (Test-Path $vsmlrtPy)) {
+                Write-Host '  vsmlrt.py no esta - descargando antes de parchear...' -ForegroundColor Yellow
+                Install-VsmlrtScripts -Config $config -VsDir $vsDir | Out-Null
+            }
             if (Test-Path $vsmlrtPy) {
+                Backup-VsmlrtPy -Path $vsmlrtPy
                 Invoke-VsmlrtPatch -Path $vsmlrtPy
             } else {
-                Write-Bad 'vsmlrt.py no encontrado'
+                Write-Bad 'No se pudo obtener vsmlrt.py — revisa la conexion y vuelve a Instalar'
             }
         }
         3 {
