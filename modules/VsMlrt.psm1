@@ -32,18 +32,53 @@ function Install-VsMlrt {
 
     Write-Host "     Versión: $($rel.Tag)" -ForegroundColor Gray
 
-    # Determine which bundle to download based on backend
+    # Determine which bundle to download based on backend.
+    # Contenido de cada bundle (verificado en el workflow de release de vs-mlrt):
+    #   cuda         : VSOV + VSORT + VSTRT + VSTRT-RTX + VSNCNN + libs CUDA
+    #                  (cublas/cudnn/cufft/cupti/nvblas) — para NVIDIA Turing+
+    #   generic-gpu  : VSOV + VSORT + VSNCNN (GPU) — sin CUDA, para Pascal,
+    #                  AMD, Intel via Vulkan
+    #   tensorrt     : igual a cuda PERO sin las libs CUDA. No sirve standalone
+    #                  porque TensorRT 10 las necesita en runtime.
+    #   cpu          : VSOV + VSORT — sin GPU, fallback CPU
+    # El backend MVTOOLS no llama a Install-VsMlrt (la rama del wizard se
+    # saltea esto), pero igual mapeamos a cpu por completitud.
     $bundlePattern = switch ($BackendType) {
-        "TRT"     { "vsmlrt-windows-x64-cuda" }
-        "NCNN_VK" { "vsmlrt-windows-x64-vulkan" }
-        default   { "vsmlrt-windows-x64-cuda" }
+        "TRT"      { "vsmlrt-windows-x64-cuda" }
+        "TRT_RTX"  { "vsmlrt-windows-x64-cuda" }
+        "NCNN_VK"  { "vsmlrt-windows-x64-generic-gpu" }
+        "MVTOOLS"  { "vsmlrt-windows-x64-cpu" }
+        default    { "vsmlrt-windows-x64-cuda" }
     }
 
     # Find matching assets (could be split: .7z.001, .7z.002, or single .7z)
     $matchingAssets = $rel.Assets | Where-Object { $_.Name -match $bundlePattern }
 
+    # Fallback: vs-mlrt renombro algunos bundles entre releases (p.ej. el
+    # NCNN/Vulkan se llamo "vulkan" en versiones viejas, ahora "generic-gpu").
+    # Si el patron primario no matchea, probamos alternativas conocidas en
+    # vez de tirar throw inmediatamente.
     if ($matchingAssets.Count -eq 0) {
-        Write-Host "[!!] No se encontraron assets para '$bundlePattern'" -ForegroundColor Yellow
+        $fallbackPatterns = switch ($BackendType) {
+            "TRT"      { @("vsmlrt-windows-x64-tensorrt") }    # ojo: sin CUDA libs
+            "TRT_RTX"  { @("vsmlrt-windows-x64-tensorrt") }
+            "NCNN_VK"  { @("vsmlrt-windows-x64-vulkan",       # nombre viejo
+                           "VSNCNN-Windows-x64") }            # plugin standalone
+            "MVTOOLS"  { @("vsmlrt-windows-x64-generic-gpu") }
+            default    { @() }
+        }
+        foreach ($alt in $fallbackPatterns) {
+            $matchingAssets = $rel.Assets | Where-Object { $_.Name -match $alt }
+            if ($matchingAssets.Count -gt 0) {
+                Write-Host "     Bundle primario '$bundlePattern' no encontrado, usando fallback '$alt'" -ForegroundColor Yellow
+                $bundlePattern = $alt
+                break
+            }
+        }
+    }
+
+    if ($matchingAssets.Count -eq 0) {
+        Write-Host "[!!] No se encontraron assets para '$bundlePattern' ni fallbacks" -ForegroundColor Yellow
         Write-Host "     Assets disponibles:" -ForegroundColor DarkGray
         foreach ($a in $rel.Assets) { Write-Host "       $($a.Name)" -ForegroundColor DarkGray }
         throw "vs-mlrt bundle not found for backend $BackendType"
