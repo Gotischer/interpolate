@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  Download.psm1 — Download manager with aria2 acceleration
 #
 #  Features: aria2 multi-connection, BITS fallback, split archives (.001/.002),

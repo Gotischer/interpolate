@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  VsMlrt.psm1 — vs-mlrt bundle installation (RIFE + TensorRT/NCNN)
 #
 #  Handles: download (split archives .001/.002), extraction, model installation,

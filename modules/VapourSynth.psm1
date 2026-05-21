@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  VapourSynth.psm1 — VapourSynth portable installation and management
 #
 #  Handles: download, extraction, and verification of VapourSynth R76+
@@ -113,12 +113,35 @@ Lib\site-packages
         & $pyExe $pipScript --no-warn-script-location | Out-Host
     }
 
-    # 2) Look for the portable zip in assets and download
+    # 2) Look for the portable zip in assets and download.
+    # NOTE: la release de VapourSynth incluye dos assets que matchean *Portable*.zip:
+    #   - Install-Portable-VapourSynth-R76.zip  (~2 KB, instalador wrapper)
+    #   - VapourSynth64-Portable-R76.zip        (~15 MB, contenido real)
+    # Antes "Where-Object *Portable* | Select -First 1" caia en el instalador
+    # cuando GitHub lo listaba primero y la extraccion fallaba al no encontrar
+    # el subdir wheel/. Filtramos explicitamente:
+    #   - excluyendo nombres que empiecen con "Install-"
+    #   - prefiriendo VapourSynth64-Portable-<tag>.zip
+    #   - validando tamano > 1 MB como ultimo seguro
     $zipName = "VapourSynth64-Portable-$tag.zip"
     $zipAsset = $null
     if ($rel -and $rel.Assets) {
-        $zipAsset = $rel.Assets | Where-Object { $_.Name -like "*Portable*" -and $_.Name -like "*.zip" } |
-                    Select-Object -First 1
+        $zipAsset = $rel.Assets |
+            Where-Object {
+                $_.Name -like "VapourSynth64-Portable-*.zip" -and
+                $_.Name -notlike "Install-*" -and
+                (-not $_.Size -or $_.Size -gt 1MB)
+            } |
+            Select-Object -First 1
+        # Fallback: cualquier *Portable*.zip que NO sea el instalador
+        if (-not $zipAsset) {
+            $zipAsset = $rel.Assets |
+                Where-Object {
+                    $_.Name -like "*Portable*" -and $_.Name -like "*.zip" -and
+                    $_.Name -notlike "Install-*"
+                } |
+                Select-Object -First 1
+        }
     }
 
     $zipUrl = if ($zipAsset) { $zipAsset.Url }

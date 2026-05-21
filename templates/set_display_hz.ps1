@@ -1,4 +1,4 @@
-# sethz-template-version: {{SETHZ_TEMPLATE_VERSION}}
+﻿# sethz-template-version: {{SETHZ_TEMPLATE_VERSION}}
 # =============================================================================
 # set_display_hz.ps1 — Change monitor refresh rate via Windows API
 # Used by auto_mode.lua for HDR pass-through (match Hz to content fps).

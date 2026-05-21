@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  Config.psm1 — Configuration management
 #
 #  Handles: loading, saving, validation, and first-time setup of the wizard

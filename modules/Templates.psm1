@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  Templates.psm1 — Generate configuration files from templates
 #
 #  Reads template files with {{PLACEHOLDER}} markers and substitutes values

@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  GPU.psm1 — GPU detection, backend selection, and profile matching
 #
 #  Detects: GPU model, vendor, generation, compute capability, driver version.

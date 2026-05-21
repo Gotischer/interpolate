@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  build-single-bat.ps1 — Empaqueta el wizard en un .bat auto-extraible
 #
 #  Estrategia: Comprime todo en un .zip, lo codifica en Base64, lo divide
@@ -34,6 +34,7 @@ $filesToEmbed = @(
     "templates\interpolation-mvtools.vpy",
     "templates\auto_mode.lua",
     "templates\set_display_hz.ps1",
+    "templates\shaders\NVScaler.glsl",
     "profiles\gpu-profiles.json"
 )
 
@@ -70,8 +71,13 @@ New-Item -ItemType Directory -Path (Join-Path $staging "templates") | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $staging "profiles") | Out-Null
 
 foreach ($f in $filesToEmbed) {
-    $src = Join-Path $scriptDir $f
-    $dst = Join-Path $staging $f
+    $src    = Join-Path $scriptDir $f
+    $dst    = Join-Path $staging $f
+    # Crear el directorio padre si no existe (templates/shaders/ etc.).
+    $dstDir = Split-Path $dst -Parent
+    if (-not (Test-Path $dstDir)) {
+        New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+    }
     Copy-Item $src $dst -Force
 }
 

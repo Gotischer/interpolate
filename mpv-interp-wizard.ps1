@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  mpv-interp-wizard.ps1
 #
 #  Wizard interactivo para instalar/actualizar/reparar interpolacion de frames
@@ -18,7 +18,7 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.0"
+$Global:WizardVersion       = "2.1.1"
 $Global:VpyTemplateVersion  = 1
 $Global:LuaTemplateVersion  = 1
 $Global:SetHzTemplateVersion = 1

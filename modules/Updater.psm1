@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  Updater.psm1 — Auto-update for wizard and components
 #
 #  Checks GitHub for newer versions of: wizard, VapourSynth, vs-mlrt.
