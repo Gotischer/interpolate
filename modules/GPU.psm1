@@ -75,7 +75,11 @@ function Detect-GPU {
             elseif ($name -match "gtx\s*10[0-9]{2}|titan\s*xp|titan\s*x") {
                 $env.GPUGen           = "Pascal"
                 $env.ComputeCap       = "6.1"
-                $env.SupportedBackend = "RIFE_TRT"
+                # TensorRT 10 dropeo soporte de Pascal (necesita sm >= 7.5).
+                # vsmlrt-cuda no incluye nvinfer_builder_resource_sm60/61, asi
+                # que Backend.TRT falla a la hora de compilar el engine. NCNN
+                # via Vulkan corre nativo en Pascal sin esa limitacion.
+                $env.SupportedBackend = "RIFE_NCNN"
                 $env.ProfileKey       = "Pascal"
             }
             else {

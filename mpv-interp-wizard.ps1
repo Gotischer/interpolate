@@ -18,7 +18,7 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.4"
+$Global:WizardVersion       = "2.1.5"
 $Global:VpyTemplateVersion  = 1
 $Global:LuaTemplateVersion  = 1
 $Global:SetHzTemplateVersion = 1
@@ -155,7 +155,9 @@ function Invoke-Install {
         default     { 'MVTOOLS' }
     }
 
-    # 2) VapourSynth
+    # 2) VapourSynth — pasamos GpuProfileKey para que Install-VapourSynth
+    # decida si instalar las deps de TRT_RTX (solo Blackwell las necesita).
+    $config.GpuProfileKey = $gpuEnv.ProfileKey
     $vsDir = Install-VapourSynth -Config $config -TargetRelease $config.VsRelease -Force
 
     if ($backendType -ne 'MVTOOLS') {

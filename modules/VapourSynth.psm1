@@ -222,9 +222,18 @@ Lib\site-packages
         # engines al vuelo via tensorrt_rtx_1_4.dll. Sin estos, el .vpy lanza
         # ModuleNotFoundError y cae a Backend.TRT generico (mas lento en RTX).
         # Setuptools/wheel son prerequisitos de modelopt[onnx].
-        Write-Host "     Instalando deps de TensorRT-RTX (onnx + modelopt[onnx])..." -ForegroundColor Gray
-        & $pyExe -m pip install --no-warn-script-location setuptools wheel | Out-Host
-        & $pyExe -m pip install --no-warn-script-location onnx 'nvidia-modelopt[onnx]' | Out-Host
+        #
+        # Solo instalamos estas deps cuando hay GPU Blackwell (RTX 50xx), unico
+        # caso donde TRT_RTX vale la pena. modelopt + torch + cupy son ~2 GB,
+        # innecesarios para Pascal/Turing/Ampere/Ada (que usan Backend.TRT) y
+        # para AMD/Intel (NCNN_VK).
+        if ($Config.GpuProfileKey -eq 'Blackwell') {
+            Write-Host "     Instalando deps de TensorRT-RTX (Blackwell)..." -ForegroundColor Gray
+            & $pyExe -m pip install --no-warn-script-location setuptools wheel | Out-Host
+            & $pyExe -m pip install --no-warn-script-location onnx 'nvidia-modelopt[onnx]' | Out-Host
+        } else {
+            Write-Host "     (skip TensorRT-RTX deps: no es Blackwell)" -ForegroundColor DarkGray
+        }
 
         # Cleanup get-pip.py and other temporary setup artifacts
         $pipScript = Join-Path $Config.BaseDir "get-pip.py"

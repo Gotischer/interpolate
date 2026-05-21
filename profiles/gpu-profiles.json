@@ -48,12 +48,13 @@
             "label": "💨 Rendimiento (GTX 10xx)",
             "gpu_gen": "Pascal",
             "compute_cap": "6.1",
-            "backend": "TRT",
+            "_note_backend": "TensorRT 10 dropeo Pascal (sm_61). vs-mlrt-cuda no incluye nvinfer_builder_resource_sm60/61. Usamos NCNN/Vulkan, que funciona en cualquier GPU con Vulkan.",
+            "backend": "NCNN_VK",
             "model": "v4.25",
             "fp16": false,
             "streams": 1,
-            "workspace": 1000,
-            "notes": "GTX 1050-1080 — FP32 forced, limited workspace, single stream"
+            "workspace": null,
+            "notes": "GTX 1050-1080 — NCNN+Vulkan (TRT 10 ya no soporta Pascal). FP32 + single stream."
         },
         "NVIDIA_Old": {
             "label": "💨 Rendimiento (NVIDIA antigua)",
