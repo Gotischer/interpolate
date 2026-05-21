@@ -5,223 +5,207 @@
 #
 # mpv injects: video_in, container_fps, display_fps
 # =============================================================================
-import math
+
+# Imports minimos al tope. Cualquier error mas abajo va a ser capturado por el
+# try/except del fondo (no usamos sys.excepthook porque vsscript captura las
+# excepciones via PyErr_* y nunca llegan al excepthook de Python).
 import os
 import sys
 import traceback
-import vapoursynth as vs
 
-core = vs.core
 
-# mpv solo logea "Could not initialize VapourSynth scripting" sin el traceback
-# Python real. Capturamos cualquier excepcion no manejada en este script y la
-# escribimos a un archivo junto al .vpy para que el diagnostico pueda leerlo.
-def _install_crash_logger():
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "interpolation.error.log")
-    def _hook(exc_type, exc_value, exc_tb):
+def _write_crash_log():
+    """Escribe el ultimo traceback de Python a interpolation.error.log.
+
+    Prueba varias ubicaciones porque __file__ a veces no esta definido en el
+    contexto de vsscript:
+      1) directorio del .vpy (lo normal cuando mpv carga el archivo)
+      2) %USERPROFILE% (siempre disponible)
+      3) %TEMP%
+    """
+    exc_info = sys.exc_info()
+    if exc_info[0] is None:
+        return None
+    candidates = []
+    try:
+        candidates.append(os.path.dirname(os.path.abspath(__file__)))
+    except NameError:
+        pass
+    candidates.append(os.path.expanduser("~"))
+    try:
+        import tempfile
+        candidates.append(tempfile.gettempdir())
+    except Exception:
+        pass
+    for d in candidates:
         try:
+            log_path = os.path.join(d, "interpolation.error.log")
             with open(log_path, "w", encoding="utf-8") as f:
                 f.write("interpolation.vpy crashed during evaluation\n")
                 f.write("Python: " + sys.version.replace("\n", " ") + "\n")
-                f.write("VapourSynth: " + str(vs.__version__) + "\n")
-                f.write("sys.path:\n")
-                for p in sys.path: f.write("  " + p + "\n")
+                f.write("Executable: " + sys.executable + "\n")
                 f.write("\n--- Traceback ---\n")
-                traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+                traceback.print_exception(exc_info[0], exc_info[1], exc_info[2], file=f)
+                f.write("\nsys.path:\n")
+                for p in sys.path:
+                    f.write("  " + str(p) + "\n")
+                f.write("\nenv (relevant):\n")
+                for k in ("VAPOURSYNTH_EXTRA_PLUGIN_PATH", "PYTHONHOME", "PYTHONPATH", "VSSCRIPT_PATH"):
+                    f.write("  " + k + "=" + os.environ.get(k, "<not set>") + "\n")
+            return log_path
         except Exception:
-            pass
-        sys.__excepthook__(exc_type, exc_value, exc_tb)
-    sys.excepthook = _hook
-
-_install_crash_logger()
-
-# ---- Explicit plugin loading -----------------------------------------------
-# vs-mlrt plugins (vsov/vsort/vsncnn/vstrt/vstrt_rtx) currently use API3, which
-# the VS R76 wheel does not auto-load when imported via VSScript. We bypass the
-# autoload heuristics entirely and load each plugin by absolute path, picking
-# the search dirs in order of likelihood. Errors are swallowed (a backend may
-# legitimately be missing, e.g. vstrt_rtx without RTX), but if *none* loads we
-# raise so the user gets a clearer error than vsmlrt's "cannot load any filters".
-def _load_mlrt_plugins():
-    candidates = []
-    # 1) Explicit hint via env var
-    extra = os.environ.get("VAPOURSYNTH_EXTRA_PLUGIN_PATH")
-    if extra:
-        candidates.append(extra)
-    # 2) Standard portable layout: <portable>/vs-plugins next to libvapoursynth.dll
-    here = os.path.dirname(os.path.abspath(vs.__file__))                 # .../site-packages/vapoursynth
-    candidates.append(os.path.normpath(os.path.join(here, "..", "..", "..", "vs-plugins")))
-    # 3) Wheel's bundled plugins dir
-    candidates.append(os.path.join(here, "plugins"))
-
-    loaded = 0
-    for d in candidates:
-        if not d or not os.path.isdir(d):
             continue
-        for dll in ("vsov.dll", "vsort.dll", "vsncnn.dll", "vstrt.dll", "vstrt_rtx.dll"):
-            p = os.path.join(d, dll)
-            if not os.path.isfile(p):
+    return None
+
+
+try:
+    import math
+    import vapoursynth as vs
+
+    core = vs.core
+
+    # ---- Explicit plugin loading -----------------------------------------
+    # vs-mlrt plugins (vsov/vsort/vsncnn/vstrt/vstrt_rtx) usan API3, que el
+    # wheel de VS R76 no auto-carga via VSScript. Cargamos cada plugin por
+    # path absoluto, probando varios candidatos.
+    def _load_mlrt_plugins():
+        candidates = []
+        extra = os.environ.get("VAPOURSYNTH_EXTRA_PLUGIN_PATH")
+        if extra:
+            candidates.append(extra)
+        here = os.path.dirname(os.path.abspath(vs.__file__))
+        candidates.append(os.path.normpath(os.path.join(here, "..", "..", "..", "vs-plugins")))
+        candidates.append(os.path.join(here, "plugins"))
+
+        loaded = 0
+        for d in candidates:
+            if not d or not os.path.isdir(d):
                 continue
-            try:
-                core.std.LoadPlugin(p)
-                loaded += 1
-            except Exception:
-                pass
-        if loaded:
-            break
-    if not loaded:
-        raise RuntimeError(
-            "interpolation.vpy: no vs-mlrt backend plugins found. "
-            "Looked in: " + ", ".join(c for c in candidates if c)
+            for dll in ("vsov.dll", "vsort.dll", "vsncnn.dll", "vstrt.dll", "vstrt_rtx.dll"):
+                p = os.path.join(d, dll)
+                if not os.path.isfile(p):
+                    continue
+                try:
+                    core.std.LoadPlugin(p)
+                    loaded += 1
+                except Exception:
+                    pass
+            if loaded:
+                break
+        if not loaded:
+            raise RuntimeError(
+                "interpolation.vpy: no vs-mlrt backend plugins found. Looked in: " +
+                ", ".join(c for c in candidates if c)
+            )
+
+    _load_mlrt_plugins()
+
+    from vsmlrt import RIFE, RIFEModel, Backend
+
+    # ---- Configuration (set by wizard, editable) -------------------------
+    RIFE_MODEL      = {{RIFE_MODEL_ENUM}}
+    NUM_STREAMS     = {{NUM_STREAMS}}
+    FP16            = {{FP16}}
+    HDR_INTERPOLATE = {{HDR_INTERPOLATION}}
+
+    # ---- Input -----------------------------------------------------------
+    clip = video_in
+    src_w = clip.width
+    src_h = clip.height
+
+    target_fps = display_fps if display_fps and display_fps > 0 else 60.0
+    src_fps    = container_fps if container_fps and container_fps > 0 else 24.0
+    MAX_RIFE_MULTI = 5
+    multi      = min(MAX_RIFE_MULTI, max(2, math.ceil(target_fps / src_fps)))
+
+    def is_hdr(clip):
+        try:
+            frame = clip.get_frame(0)
+            transfer = frame.props.get("_Transfer", 1)
+            return transfer in (16, 18)
+        except Exception:
+            return False
+
+    clip_is_hdr = is_hdr(clip)
+
+    if clip_is_hdr and not HDR_INTERPOLATE:
+        clip.set_output()
+    else:
+        try:
+            frame = clip.get_frame(0)
+            src_matrix    = frame.props.get("_Matrix", 1)
+            src_transfer  = frame.props.get("_Transfer", 1)
+            src_primaries = frame.props.get("_Primaries", 1)
+        except Exception:
+            src_matrix, src_transfer, src_primaries = 1, 1, 1
+
+        matrix_str    = "2020ncl" if src_matrix in (9, 10) else "709"
+        transfer_str  = "st2084" if src_transfer == 16 else ("arib-std-b67" if src_transfer == 18 else "709")
+        primaries_str = "2020" if src_primaries == 9 else "709"
+
+        # Cap a 1080p para que RIFE no se ahogue con sources 4K.
+        MAX_RIFE_W = 1920
+        MAX_RIFE_H = 1080
+        target_w, target_h = clip.width, clip.height
+        if clip.width > MAX_RIFE_W or clip.height > MAX_RIFE_H:
+            ratio = min(MAX_RIFE_W / clip.width, MAX_RIFE_H / clip.height)
+            target_w = (int(clip.width  * ratio) // 2) * 2
+            target_h = (int(clip.height * ratio) // 2) * 2
+
+        clip = core.resize.Bicubic(
+            clip, format=vs.RGBH,
+            width=target_w, height=target_h,
+            matrix_in_s=matrix_str,
+            transfer_in_s=transfer_str,
+            primaries_in_s=primaries_str,
+            range_in_s="limited", range_s="full",
+            dither_type="error_diffusion"
         )
 
-_load_mlrt_plugins()
+        # Scene detection con PlaneStats (sin plugins): atacha _SceneChangeNext
+        # que vsmlrt.RIFE lee para no interpolar en cortes de escena.
+        SC_THRESHOLD = 0.10
+        sc_src   = core.resize.Bicubic(clip, format=vs.GRAY8, width=320, height=180, matrix_s="709")
+        sc_next  = sc_src.std.DuplicateFrames(frames=[sc_src.num_frames - 1]).std.Trim(first=1)
+        sc_stats = core.std.PlaneStats(sc_src, sc_next, prop="SC")
+        def _attach_sc(n, f):
+            fout = f[0].copy()
+            fout.props["_SceneChangeNext"] = 1 if f[1].props.get("SCDiff", 0.0) > SC_THRESHOLD else 0
+            return fout
+        clip = core.std.ModifyFrame(clip, [clip, sc_stats], _attach_sc)
 
-from vsmlrt import RIFE, RIFEModel, Backend
+        pad_w = math.ceil(clip.width / 32) * 32 - clip.width
+        pad_h = math.ceil(clip.height / 32) * 32 - clip.height
+        left = right = top = bottom = 0
+        if pad_w or pad_h:
+            left, right = pad_w // 2, pad_w - pad_w // 2
+            top, bottom = pad_h // 2, pad_h - pad_h // 2
+            clip = core.std.AddBorders(clip, left=left, right=right, top=top, bottom=bottom)
 
-# ---- Configuration (set by wizard, editable) --------------------------------
-RIFE_MODEL      = {{RIFE_MODEL_ENUM}}
-NUM_STREAMS     = {{NUM_STREAMS}}
-FP16            = {{FP16}}
-HDR_INTERPOLATE = {{HDR_INTERPOLATION}}  # True = interpolate HDR content; False = passthrough
+        backend = {{BACKEND_EXPR}}
 
-# ---- Input ------------------------------------------------------------------
-clip = video_in
-src_w = clip.width
-src_h = clip.height
+        clip = RIFE(
+            clip, model=RIFE_MODEL, backend=backend,
+            multi=multi, scale=1.0, video_player=True
+        )
 
-# ---- Frame rate calculation -------------------------------------------------
-# mpv provides display_fps (monitor Hz) and container_fps (source fps).
-# ceil() ensures we always reach or exceed monitor Hz.
-# mpv drops extra frames via vsync, so overshoot is fine.
-#   60Hz / 24fps -> ceil(2.5) = 3 -> 72fps -> vsync 60
-#  120Hz / 24fps -> ceil(5.0) = 5 -> 120fps -> perfect
-target_fps = display_fps if display_fps and display_fps > 0 else 60.0
-src_fps    = container_fps if container_fps and container_fps > 0 else 24.0
-# Cap maximo de interpolacion. Sin cap, un TV 120Hz con source 24fps fuerza
-# multi=5 (o 6 si mpv detecta 143.85 Hz por HDMI 2.1) lo que dispara el peak
-# por frame. Cap a 5 produce 120 fps exactos para 120Hz y mantiene la GPU
-# holgada. Subir a 6+ solo si tu GPU lo aguanta a la res RIFE elegida.
-MAX_RIFE_MULTI = 5
-multi      = min(MAX_RIFE_MULTI, max(2, math.ceil(target_fps / src_fps)))
+        if pad_w or pad_h:
+            clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)
 
-# ---- HDR detection ----------------------------------------------------------
-def is_hdr(clip):
-    """Check if clip has HDR transfer characteristics (PQ or HLG)."""
-    try:
-        frame = clip.get_frame(0)
-        transfer = frame.props.get("_Transfer", 1)
-        # 16 = SMPTE ST 2084 (PQ), 18 = HLG
-        return transfer in (16, 18)
-    except Exception:
-        return False
+        clip = core.resize.Bicubic(
+            clip, format=vs.YUV420P10,
+            matrix_s=matrix_str,
+            transfer_s=transfer_str,
+            primaries_s=primaries_str,
+            range_in_s="full", range_s="limited",
+            dither_type="error_diffusion"
+        )
 
-clip_is_hdr = is_hdr(clip)
+        clip.set_output()
 
-# If HDR and user disabled HDR interpolation, output as-is (no RIFE)
-if clip_is_hdr and not HDR_INTERPOLATE:
-    clip.set_output()
-else:
-    # ---- Colorspace detection -----------------------------------------------
-    # Detect source colorspace to preserve it through the pipeline.
-    # HDR uses BT.2020 + PQ/HLG; SDR uses BT.709.
-    try:
-        frame = clip.get_frame(0)
-        src_matrix    = frame.props.get("_Matrix", 1)      # 1=709, 9=2020ncl
-        src_transfer  = frame.props.get("_Transfer", 1)    # 1=709, 16=PQ, 18=HLG
-        src_primaries = frame.props.get("_Primaries", 1)   # 1=709, 9=2020
-    except Exception:
-        src_matrix, src_transfer, src_primaries = 1, 1, 1
-
-    # Map numeric codes to string names for resize
-    matrix_str    = "2020ncl" if src_matrix in (9, 10) else "709"
-    transfer_str  = "st2084" if src_transfer == 16 else ("arib-std-b67" if src_transfer == 18 else "709")
-    primaries_str = "2020" if src_primaries == 9 else "709"
-
-    # ---- Scene detection (prevents artifacts at scene cuts) -----------------
-    # RIFE with sc=True handles scene detection internally.
-    # No external SCDetect plugin needed (MiscFilters not in VS R73 portable).
-
-    # ---- Cap de resolucion antes de RIFE -----------------------------------
-    # Cap fijo (no depende de display_res, que mpv solo inyecta una vez al
-    # cargar el filtro: si mueves la ventana a un monitor 4K no se reevalua).
-    # 1920x1080 mantiene RIFE holgado @60Hz incluso con sources 4K. El upscale
-    # al display real lo hace mpv con NVScaler/NIS (ver mpv.conf, el shader
-    # vive en templates/shaders/NVScaler.glsl y lo copia el wizard). NIS es
-    # el mismo upscaler espacial publico de NVIDIA que usa SVP — sin perdida
-    # visual perceptible respecto a hacer RIFE en res nativa del display.
-    MAX_RIFE_W = 1920
-    MAX_RIFE_H = 1080
-    target_w, target_h = clip.width, clip.height
-    if clip.width > MAX_RIFE_W or clip.height > MAX_RIFE_H:
-        ratio = min(MAX_RIFE_W / clip.width, MAX_RIFE_H / clip.height)
-        target_w = (int(clip.width  * ratio) // 2) * 2  # mod2 para chroma
-        target_h = (int(clip.height * ratio) // 2) * 2
-
-    # ---- Convert to RGBH for RIFE ------------------------------------------
-    # RGBH (RGB Half-float, 16-bit) preserves HDR dynamic range.
-    # Si hubo downscale, lo combinamos aqui en un solo paso (evita un resize).
-    clip = core.resize.Bicubic(
-        clip, format=vs.RGBH,
-        width=target_w, height=target_h,
-        matrix_in_s=matrix_str,
-        transfer_in_s=transfer_str,
-        primaries_in_s=primaries_str,
-        range_in_s="limited", range_s="full",
-        dither_type="error_diffusion"
-    )
-
-    # ---- Scene detection (zero-plugin polyfill) ----------------------------
-    # vsmlrt.RIFE evalua frame.props["_SceneChangeNext"] internamente: si es
-    # truthy, devuelve el frame original en lugar de interpolar. Sin esta
-    # propiedad RIFE intenta morphear entre planos de escenas distintas y
-    # produce el "salto brusco" visible en cortes de camara.
-    #
-    # No usamos misc.SCDetect ni mv.SCDetection (no estan en el portable R76).
-    # Polyfill con PlaneStats: convertimos a GRAY8 pequeno y medimos la
-    # diferencia promedio entre cada frame y el siguiente. Umbral 0.10 detecta
-    # cortes duros sin disparar falsos positivos en movimiento normal.
-    SC_THRESHOLD = 0.10
-    sc_src   = core.resize.Bicubic(clip, format=vs.GRAY8, width=320, height=180, matrix_s="709")
-    sc_next  = sc_src.std.DuplicateFrames(frames=[sc_src.num_frames - 1]).std.Trim(first=1)
-    sc_stats = core.std.PlaneStats(sc_src, sc_next, prop="SC")
-    def _attach_sc(n, f):
-        fout = f[0].copy()
-        fout.props["_SceneChangeNext"] = 1 if f[1].props.get("SCDiff", 0.0) > SC_THRESHOLD else 0
-        return fout
-    clip = core.std.ModifyFrame(clip, [clip, sc_stats], _attach_sc)
-
-    # ---- Pad to mod32 (required by RIFE) ------------------------------------
-    pad_w = math.ceil(clip.width / 32) * 32 - clip.width
-    pad_h = math.ceil(clip.height / 32) * 32 - clip.height
-    left = right = top = bottom = 0
-    if pad_w or pad_h:
-        left, right = pad_w // 2, pad_w - pad_w // 2
-        top, bottom = pad_h // 2, pad_h - pad_h // 2
-        clip = core.std.AddBorders(clip, left=left, right=right, top=top, bottom=bottom)
-
-    # ---- RIFE backend -------------------------------------------------------
-    backend = {{BACKEND_EXPR}}
-
-    # scale=1.0 is required for RIFE v4.7+ models
-    clip = RIFE(
-        clip, model=RIFE_MODEL, backend=backend,
-        multi=multi, scale=1.0, video_player=True
-    )
-
-    # ---- Unpad ---------------------------------------------------------------
-    if pad_w or pad_h:
-        clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)
-
-    # ---- Convert back to YUV420P10 ------------------------------------------
-    # Preserve original colorspace (HDR: BT.2020/PQ, SDR: BT.709)
-    clip = core.resize.Bicubic(
-        clip, format=vs.YUV420P10,
-        matrix_s=matrix_str,
-        transfer_s=transfer_str,
-        primaries_s=primaries_str,
-        range_in_s="full", range_s="limited",
-        dither_type="error_diffusion"
-    )
-
-    clip.set_output()
+except BaseException:
+    # Captura CUALQUIER error durante la evaluacion del .vpy (incluido
+    # ImportError, RuntimeError de vsmlrt, etc.) y lo escribe a un archivo
+    # para diagnostico, despues re-lanza para que mpv tambien lo vea.
+    _write_crash_log()
+    raise
