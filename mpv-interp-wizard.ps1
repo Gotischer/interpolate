@@ -18,7 +18,7 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.13"
+$Global:WizardVersion       = "2.1.14"
 $Global:VpyTemplateVersion  = 3
 $Global:LuaTemplateVersion  = 1
 $Global:SetHzTemplateVersion = 1
@@ -202,14 +202,20 @@ function Invoke-Install {
     # 7c) Generate mpv-vs.bat launcher (sets VSSCRIPT_PATH for portable VS)
     New-MpvLauncher -Config $config -Force
 
+    # 7d) Setear env vars User-level para que mpv.exe directo funcione
+    # sin necesidad de pasar por mpv-vs.bat cada vez. Es lo que el usuario
+    # espera de un install (doble click en video -> abre con mpv y funciona).
+    Set-WizardVsEnvVars -VsDir $vsDir | Out-Null
+
     # 8) Update config with installed versions
     if ($mlrtTag) { $config.MlrtVersion = $mlrtTag }
     Export-WizardConfig -Config $config -Path $configPath | Out-Null
 
     Write-Host ''
     Write-Title 'INSTALACION COMPLETA!'
-    Write-Host '  Abre cualquier video con mpv-vs.bat y disfruta.' -ForegroundColor Green
-    Write-Host '  (mpv-vs.bat esta junto a mpv.exe)' -ForegroundColor Green
+    Write-Host '  Abre cualquier video con mpv.exe o mpv-vs.bat — ambos funcionan.' -ForegroundColor Green
+    Write-Host '  (Cierra sesion/reinicia primero para que las env vars se' -ForegroundColor Yellow
+    Write-Host '   propaguen a Explorer y nuevos terminales.)' -ForegroundColor Yellow
     Write-Host ''
     Write-Host '  Atajos en mpv:' -ForegroundColor Cyan
     Write-Host '    Ctrl+i       -> Toggle interpolacion ON/OFF' -ForegroundColor Gray
@@ -231,7 +237,8 @@ function Invoke-Repair {
         'Regenerar auto_mode.lua',
         'Re-parchear vsmlrt.py',
         'Reinstalar modelos RIFE',
-        'Limpiar variables de entorno persistentes (VSSCRIPT_PATH, PYTHONPATH)',
+        'Setear variables de entorno User (mpv.exe directo va a funcionar)',
+        'Limpiar variables de entorno persistentes invalidas',
         'Regenerar TODO',
         'Volver'
     )
@@ -280,9 +287,29 @@ function Invoke-Repair {
             Install-RIFEModels -Config $config -VsDir $vsDir -Models $modelsToInstall
         }
         4 {
-            $stale = Get-StaleVsEnvVars
+            # Setear env vars User-level: hace que mpv.exe directo funcione
+            # sin necesidad de mpv-vs.bat. Es lo opuesto del "Limpiar"
+            # historico (que solo borraba lo MAL configurado).
+            $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
+            if (-not (Test-Path $vsDir)) {
+                Write-Bad "No existe $vsDir - instala primero"
+            } else {
+                Set-WizardVsEnvVars -VsDir $vsDir | Out-Null
+                Write-Host ''
+                Write-Host '  Importante:' -ForegroundColor Yellow
+                Write-Host '  - Cierra Windows Terminal / consolas abiertas' -ForegroundColor Yellow
+                Write-Host '  - Cierra sesion y vuelve a entrar (o reinicia)' -ForegroundColor Yellow
+                Write-Host '  - Despues, mpv.exe directo funciona sin mpv-vs.bat' -ForegroundColor Yellow
+            }
+        }
+        5 {
+            # Limpiar env vars persistentes invalidas (paths inexistentes,
+            # apuntando a otro install). NO toca las valid del install
+            # actual: para esas, usa la opcion 4 (setear).
+            $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
+            $stale = Get-StaleVsEnvVars -VsDir $vsDir
             if ($stale.Count -eq 0) {
-                Write-Host '  No hay variables de entorno persistentes para limpiar.' -ForegroundColor Green
+                Write-Host '  No hay variables persistentes invalidas para limpiar.' -ForegroundColor Green
             } else {
                 foreach ($e in $stale) {
                     Write-Host ('  ' + $e.Name + ' (' + $e.Scope + ') = ' + $e.Value) -ForegroundColor Yellow
@@ -291,12 +318,11 @@ function Invoke-Repair {
                 $cleared = Clear-StaleVsEnvVars
                 Write-Host ''
                 Write-Host ('  Borradas: ' + ($cleared -join ', ')) -ForegroundColor Green
-                Write-Host '  Importante: los procesos ya abiertos (Explorer, terminales)' -ForegroundColor Yellow
-                Write-Host '  todavia heredan el valor viejo. Reinicia Explorer o cierra sesion' -ForegroundColor Yellow
-                Write-Host '  para que el cambio se propague a nuevos lanzamientos de mpv.' -ForegroundColor Yellow
+                Write-Host '  Tip: si queres mpv.exe directo, usa la opcion 4 para setear las' -ForegroundColor Yellow
+                Write-Host '       env vars correctas en lugar de solo borrar las invalidas.' -ForegroundColor Yellow
             }
         }
-        5 {
+        6 {
             New-InterpolationVpy -BackendType $backendType -Profile $profile -Config $config `
                 -DestDir $config.MpvConfigDir -Force -WizardVersion $Global:WizardVersion `
                 -VpyTemplateVersion $Global:VpyTemplateVersion
@@ -311,13 +337,8 @@ function Invoke-Repair {
             $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
             $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
             if (Test-Path $vsmlrtPy) { Invoke-VsmlrtPatch -Path $vsmlrtPy }
-
-            $cleared = Clear-StaleVsEnvVars
-            if ($cleared.Count -gt 0) {
-                Write-Host ('  Variables persistentes limpiadas: ' + ($cleared -join ', ')) -ForegroundColor Green
-            }
         }
-        6 { return }
+        7 { return }
         default { return }
     }
     Wait-Continue

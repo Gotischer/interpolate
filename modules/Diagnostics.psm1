@@ -163,35 +163,95 @@ function Invoke-Diagnostics {
 function Get-StaleVsEnvVars {
     <#
     .SYNOPSIS
-        Returns a list of persistent env vars (User/Machine scope) that look
-        like leftovers from old install scripts and are known to break direct
-        mpv.exe launches. Pure detection; does not modify the environment.
+        Returns a list of persistent env vars (User/Machine scope) that point
+        to INVALID paths (the case where install_interp-2.ps1 set them to a
+        non-existent or wrong location).
+
+        Valid persistent env vars (pointing to real files in the current VS
+        portable) are NOT flagged: the canonical setup uses them so mpv.exe
+        directo works without needing mpv-vs.bat each time.
     .OUTPUTS
-        Array of @{ Name; Scope; Value; Reason } — empty if everything is clean.
+        Array of @{ Name; Scope; Value; Reason } — empty if everything is OK.
     #>
+    param([string]$VsDir = $null)
+
     $bad = @()
     foreach ($scope in 'User','Machine') {
+        # VSSCRIPT_PATH debe apuntar a la DLL vsscript.dll del install actual
         $vs = [System.Environment]::GetEnvironmentVariable('VSSCRIPT_PATH', $scope)
         if ($vs) {
-            # Any persistent VSSCRIPT_PATH is suspect: the canonical setup uses
-            # mpv-vs.bat which sets it per-session. A persistent value will
-            # leak into every direct mpv.exe launch.
-            $reason = if (-not (Test-Path $vs)) {
-                'Apunta a una ruta inexistente'
+            $reason = $null
+            if (-not (Test-Path $vs)) {
+                $reason = 'Apunta a una ruta inexistente'
             } elseif ((Get-Item $vs -EA SilentlyContinue).PSIsContainer) {
-                'Apunta a un directorio (mpv espera la DLL completa)'
-            } else {
-                'Variable persistente: mejor dejar que mpv-vs.bat la configure por sesion'
+                $reason = 'Apunta a un directorio (mpv espera la DLL completa)'
+            } elseif ($VsDir -and -not $vs.ToLower().StartsWith($VsDir.ToLower())) {
+                $reason = "Apunta a otro install (esperado bajo $VsDir)"
             }
-            $bad += @{ Name = 'VSSCRIPT_PATH'; Scope = $scope; Value = $vs; Reason = $reason }
+            if ($reason) {
+                $bad += @{ Name = 'VSSCRIPT_PATH'; Scope = $scope; Value = $vs; Reason = $reason }
+            }
         }
+        # PYTHONPATH solo es problema si apunta a un VS portable que no es el actual
         $pp = [System.Environment]::GetEnvironmentVariable('PYTHONPATH', $scope)
         if ($pp -and $pp -match 'vapoursynth') {
-            $bad += @{ Name = 'PYTHONPATH'; Scope = $scope; Value = $pp;
-                       Reason = 'PYTHONPATH global apuntando a VS portable contamina otros Python instalados' }
+            $reason = $null
+            if (-not (Test-Path $pp)) {
+                $reason = 'Apunta a una ruta inexistente'
+            } elseif ($VsDir -and -not $pp.ToLower().StartsWith($VsDir.ToLower())) {
+                $reason = "Apunta a otro install (esperado bajo $VsDir)"
+            }
+            if ($reason) {
+                $bad += @{ Name = 'PYTHONPATH'; Scope = $scope; Value = $pp; Reason = $reason }
+            }
+        }
+        # PYTHONHOME similar
+        $ph = [System.Environment]::GetEnvironmentVariable('PYTHONHOME', $scope)
+        if ($ph -and $ph -match 'vapoursynth') {
+            $reason = $null
+            if (-not (Test-Path $ph)) {
+                $reason = 'Apunta a una ruta inexistente'
+            } elseif ($VsDir -and $ph.ToLower() -ne $VsDir.ToLower()) {
+                $reason = "Apunta a otro install (esperado $VsDir)"
+            }
+            if ($reason) {
+                $bad += @{ Name = 'PYTHONHOME'; Scope = $scope; Value = $ph; Reason = $reason }
+            }
         }
     }
     return ,$bad
+}
+
+function Set-WizardVsEnvVars {
+    <#
+    .SYNOPSIS
+        Setea las env vars de VapourSynth a nivel User para que mpv.exe directo
+        las herede al lanzarse (no requiere mpv-vs.bat para cada launch).
+
+        Esto deja persistente lo que mpv-vs.bat hace por sesion. Despues de
+        setear, hay que cerrar sesion / reiniciar para que Explorer (y los
+        terminales hijos) las pickeen.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$VsDir
+    )
+    if (-not (Test-Path $VsDir)) {
+        Write-Warning "VsDir no existe: $VsDir"
+        return $false
+    }
+    $set = @{}
+    $set['VSSCRIPT_PATH']                = Join-Path $VsDir "Lib\site-packages\vapoursynth\vsscript.dll"
+    $set['PYTHONHOME']                   = $VsDir
+    $set['PYTHONPATH']                   = Join-Path $VsDir "Lib\site-packages"
+    $set['VAPOURSYNTH_EXTRA_PLUGIN_PATH'] = Join-Path $VsDir "vs-plugins"
+
+    foreach ($k in $set.Keys) {
+        [System.Environment]::SetEnvironmentVariable($k, $set[$k], 'User')
+        Write-Host ("     $k = " + $set[$k]) -ForegroundColor DarkGray
+    }
+    Write-Host "[OK] Env vars seteadas a nivel User" -ForegroundColor Green
+    Write-Host "     Cierra sesion / reinicia para que Explorer las pickee." -ForegroundColor Yellow
+    return $true
 }
 
 function Clear-StaleVsEnvVars {
@@ -227,4 +287,4 @@ function Invoke-QuickCheck {
 }
 
 Export-ModuleMember -Function Invoke-Diagnostics, Invoke-QuickCheck, `
-    Get-StaleVsEnvVars, Clear-StaleVsEnvVars
+    Get-StaleVsEnvVars, Clear-StaleVsEnvVars, Set-WizardVsEnvVars
