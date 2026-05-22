@@ -17,10 +17,10 @@ Doble clic y listo. No requiere instalación previa.
 | Característica | Descripción |
 |----------------|-------------|
 | 🎮 **Backend automático según GPU** | Detecta hardware y elige el backend viable (TRT-RTX / TRT / NCNN+Vulkan / OpenVINO / MVTools) |
-| 🔄 **RIFE TensorRT-RTX** | Variante con kernels sm_120 para RTX 50xx (Blackwell) — engine compila en ~1 s vs minutos del TRT genérico |
-| 🔄 **RIFE TensorRT** | RTX 20xx/30xx/40xx — engine pre-compilado, latencia baja, throughput alto |
-| 🌐 **RIFE NCNN/Vulkan** | AMD RX modernas, Intel Arc — usa Vulkan, sin dependencias propietarias |
-| 🐢 **MVTools (CPU)** | Pascal y anteriores, AMD/Intel viejos — motion vectors clásicos, paraleliza en todos los hilos del CPU |
+| 🔄 **RIFE TensorRT-RTX** | Variante con kernels sm_120 para RTX 50xx (Blackwell) — engine compila en ~1 s vs minutos del TRT genérico. *NVIDIA only* |
+| 🔄 **RIFE TensorRT** | RTX 20xx/30xx/40xx — engine pre-compilado, latencia baja, throughput alto. *NVIDIA only* |
+| 🌐 **RIFE NCNN/Vulkan** | Intento para AMD/Intel modernas — usa Vulkan, sin dependencias propietarias. *Cobertura incompleta: ver tabla abajo* |
+| 🐢 **MVTools (CPU)** | Pascal y anteriores, AMD/Intel cuando RIFE no es viable — motion vectors clásicos (no neural), paraleliza en todos los hilos del CPU. *No es RIFE, es la técnica que usa SVP* |
 | 🎬 **Scene Detection sin plugins** | Polyfill con `PlaneStats` (en core de VapourSynth) — RIFE corta limpio en cambios de escena, sin morphing |
 | 🔍 **Cap 1080p + NIS upscale** | RIFE procesa máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS ≠ DLSS** — es un shader espacial público que corre en cualquier GPU |
 | 📺 **Multi-monitor** | Detecta cambios de refresh rate y re-aplica el filtro al mover la ventana entre monitores 60/120/144 Hz |
@@ -32,25 +32,30 @@ Doble clic y listo. No requiere instalación previa.
 
 ### Soporte de GPU
 
-| GPU | Backend | Modelo | Calidad |
-|-----|---------|--------|---------|
-| RTX 5090/5080/5070 (Blackwell) | TensorRT | v4.25 | 🏆 Máxima |
-| RTX 4090-4060 (Ada) | TensorRT | v4.25 | 🏆 Máxima |
-| RTX 3090-3050 (Ampere) | TensorRT | v4.25 | 🏆 Máxima |
-| RTX 2080-2060 (Turing) | TensorRT | v4.25 | ⚡ Balanceado |
-| **GTX 1080-1050 (Pascal)** | **MVTools (CPU)** | — | 🐢 Compatible |
-| **GTX 9xx y más viejas** | **MVTools (CPU)** | — | 🐢 Compatible |
-| AMD RX 7xxx (RDNA3) | NCNN/Vulkan | v4.25 | ⚡ Balanceado |
-| AMD RX 6xxx (RDNA2) | NCNN/Vulkan | v4.22 | 💨 Rendimiento |
-| Intel Arc | NCNN/Vulkan | v4.22 | ⚡ Balanceado |
-| iGPU / sin GPU dedicada | MVTools (CPU) | — | 🐢 Básica |
+> **Nota sobre RIFE y NVIDIA**: RIFE (Real-Time Intermediate Flow Estimation) es un **modelo neural open source**, no una tecnología propietaria de NVIDIA. Se distribuye como `.onnx` y puede ejecutarse en cualquier hardware compatible. Lo que sí es exclusivo de NVIDIA es **TensorRT** (el runtime de inferencia más rápido). Para AMD e Intel, RIFE puede correr con NCNN/Vulkan, OpenVINO o DirectML. Sin embargo, no todos los runtimes implementan todas las operaciones del modelo en todas las versiones — la cobertura real depende del backend específico y de la generación de GPU.
 
-**Por qué Pascal y anteriores van a MVTools, no a RIFE:**
+| GPU | Backend | Modelo | Calidad | Estado real |
+|-----|---------|--------|---------|-------------|
+| RTX 5090/5080/5070 (Blackwell) | TensorRT | v4.25 | 🏆 Máxima | ✅ Probado |
+| RTX 4090-4060 (Ada) | TensorRT | v4.25 | 🏆 Máxima | ✅ Funcional por arquitectura |
+| RTX 3090-3050 (Ampere) | TensorRT | v4.25 | 🏆 Máxima | ✅ Funcional por arquitectura |
+| RTX 2080-2060 (Turing) | TensorRT | v4.25 | ⚡ Balanceado | ✅ Funcional por arquitectura |
+| **GTX 1080-1050 (Pascal)** | **MVTools (CPU)** | — | 🐢 Compatible | ✅ Probado |
+| **GTX 9xx y anteriores** | **MVTools (CPU)** | — | 🐢 Compatible | ⚠ No probado, fallback por defecto |
+| AMD RX 7xxx (RDNA3) | NCNN/Vulkan (intento) → MVTools | v4.25 | ⚡ Balanceado | ⚠ No probado en AMD real |
+| AMD RX 6xxx (RDNA2) | NCNN/Vulkan (intento) → MVTools | v4.22 | 💨 Rendimiento | ⚠ No probado en AMD real |
+| Intel Arc | NCNN/Vulkan (intento) → MVTools | v4.22 | ⚡ Balanceado | ⚠ No probado en Intel Arc real |
+| iGPU / sin GPU dedicada | MVTools (CPU) | — | 🐢 Básica | ✅ Probado |
+
+**Por qué Pascal y NVIDIA antiguas van a MVTools por defecto:**
 
 - **TensorRT 10** dropeó soporte de compute capability < 7.5. Los `nvinfer_builder_resource_smXX_10.dll` que ship vs-mlrt cubren `sm_75` (Turing) hasta `sm_120` (Blackwell). No hay `sm_61` (Pascal) ni `sm_52` (Maxwell). Engine compile falla.
-- **NCNN/Vulkan** carga bien en Pascal pero el build oficial de vs-mlrt no implementa `GridSample`, que es la operación core de RIFE (warping basado en optical flow). El modelo carga pero no puede ejecutar.
-- **ORT_DML** técnicamente funciona en cualquier GPU con DirectX 12 (Pascal incluido), pero medido en una GTX 1060 a 1080p toma 100-200 ms por frame — inviable a 60 Hz.
-- **MVTools** corre en CPU con motion vectors clásicos. En un Ryzen 7 2700X (8c/16t) procesa 1080p × 2 fluido sin tocar la GPU. Calidad menor que RIFE pero **fluidez garantizada** en hardware donde RIFE no es opción.
+- **NCNN/Vulkan**: el build oficial de vs-mlrt **no implementa `GridSample`** (operación fundamental del warping basado en optical flow que RIFE necesita). El plugin carga, pero el modelo no se puede ejecutar — esto se confirmó en hardware real (GTX 1060). Posiblemente afecta también a AMD/Intel pero no fue verificado.
+- **ORT_DML**: técnicamente funciona en cualquier GPU con DirectX 12 (incluyendo Pascal). En GTX 1060 medimos 100-200 ms por frame a 1080p — inviable a 60 Hz. En GPUs AMD/Intel modernas (RDNA3, Arc, RX 7000) el rendimiento podría ser muy distinto pero no se probó.
+
+**Estado en AMD e Intel**: el wizard intentará configurar **NCNN/Vulkan** como primer backend en hardware AMD/Intel moderno. Si el `.vpy` falla en runtime (típicamente por el bug de GridSample), el `interpolation.error.log` lo va a registrar y conviene cambiar manualmente el backend a **OV_GPU** (para Intel) u **ORT_DML** (para AMD). En el peor caso, el fallback es MVTools en CPU que funciona en cualquier hardware.
+
+**MVTools** no es RIFE — es interpolación clásica basada en motion vectors (la técnica que SVP usa por defecto). Calidad menor que RIFE neural pero **fluidez garantizada** en cualquier hardware con CPU multinúcleo decente. Es el path correcto cuando RIFE no es viable.
 
 `v4.25` (no `_heavy`) es el default para garantizar fluidez 4K@60 en RTX 30/40/50 incluso con HDR. Si tu uso es exclusivamente ≤1080p y querés calidad máxima podés editar `interpolation.vpy` y cambiar `RIFEModel.v4_25` por `RIFEModel.v4_25_heavy`.
 
