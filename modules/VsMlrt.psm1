@@ -367,26 +367,43 @@ function Install-MVTools {
     $pluginDir = Join-Path $VsDir "vs-plugins"
     if (-not (Test-Path $pluginDir)) { New-Item -ItemType Directory -Path $pluginDir | Out-Null }
 
-    $rel = Get-LatestGithubRelease -Repo "dubhater/vapoursynth-mvtools"
-    if (-not $rel) { throw "No se pudo obtener release de MVTools" }
-    Write-Host "     Version: $($rel.Tag)" -ForegroundColor Gray
+    # Las ultimas 3 releases (v25, v26, v27) en dubhater/vapoursynth-mvtools
+    # NO publican assets binarios (solo source tarballs auto-generados por
+    # GitHub). La ultima con DLLs precompiladas para Windows es v24.
+    # Iteramos releases descendente hasta encontrar una con asset win64 .7z.
+    $repo = "dubhater/vapoursynth-mvtools"
+    Write-Host "     Buscando ultima release con binarios Windows..." -ForegroundColor Gray
+    $relList = $null
+    try {
+        $relList = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=15" `
+            -Headers @{ 'User-Agent' = 'mpv-interp-wizard' } -EA Stop
+    } catch {
+        throw "No se pudo obtener releases de MVTools: $($_.Exception.Message)"
+    }
 
-    # Asset esperado: MVTools-v24-x86_64.7z (o similar). Filtramos por x86_64
-    # y excluimos versiones x86 (32-bit) que tambien existen en el release.
-    $asset = $rel.Assets |
-        Where-Object {
-            $_.Name -match "x86_64|x64" -and
-            $_.Name -notmatch "x86(?!_64)" -and
-            $_.Name -match "\.7z$"
-        } |
-        Select-Object -First 1
+    $rel = $null
+    $asset = $null
+    foreach ($r in $relList) {
+        $candidate = $r.assets |
+            Where-Object {
+                $_.name -match "win64|x86_64|x64" -and
+                $_.name -notmatch "win32" -and
+                $_.name -notmatch "glibc" -and
+                $_.name -match "\.7z$"
+            } |
+            Select-Object -First 1
+        if ($candidate) {
+            $rel = @{ Tag = $r.tag_name }
+            $asset = @{ Name = $candidate.name; Url = $candidate.browser_download_url; Size = $candidate.size }
+            break
+        }
+    }
 
     if (-not $asset) {
-        Write-Host "[!!] No encontre asset x86_64 .7z en MVTools $($rel.Tag)" -ForegroundColor Yellow
-        Write-Host "     Assets disponibles:" -ForegroundColor DarkGray
-        foreach ($a in $rel.Assets) { Write-Host "       $($a.Name)" -ForegroundColor DarkGray }
-        throw "MVTools asset not found"
+        throw "No se encontro release de MVTools con binarios Windows x64. " +
+              "Revisa $repo/releases manualmente."
     }
+    Write-Host "     Version: $($rel.Tag) ($($asset.Name))" -ForegroundColor Gray
 
     $archive = Invoke-Download -FileName $asset.Name -Url $asset.Url `
         -BaseDir $Config.BaseDir -LocalBundleDir $Config.LocalBundleDir `
