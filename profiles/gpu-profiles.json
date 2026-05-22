@@ -45,27 +45,27 @@
             "notes": "RTX 2060-2080 / GTX 1650-1660 — Good quality, single stream for stability"
         },
         "Pascal": {
-            "label": "💨 Rendimiento (GTX 10xx)",
+            "label": "🐢 Compatible (GTX 10xx)",
             "gpu_gen": "Pascal",
             "compute_cap": "6.1",
-            "_note_backend": "TensorRT 10 dropeo Pascal (sm_61). vs-mlrt-cuda no incluye nvinfer_builder_resource_sm60/61. Usamos NCNN/Vulkan, que funciona en cualquier GPU con Vulkan.",
-            "backend": "NCNN_VK",
-            "model": "v4.25",
+            "_note_backend": "TensorRT 10 dropeo Pascal (sm_61, sin nvinfer_builder_resource). NCNN/Vulkan no soporta GridSample (op fundamental de RIFE). ORT_DML carga pero la inferencia en GTX 10xx a 1080p tarda 100-200 ms por frame, inviable a 60 Hz. MVTools (CPU motion vectors) es el unico backend usable en este hardware.",
+            "backend": "MVTOOLS",
+            "model": null,
             "fp16": false,
             "streams": 1,
             "workspace": null,
-            "notes": "GTX 1050-1080 — NCNN+Vulkan (TRT 10 ya no soporta Pascal). FP32 + single stream."
+            "notes": "GTX 1050-1080 — MVTools (CPU). RIFE neural no es viable en Pascal."
         },
         "NVIDIA_Old": {
-            "label": "💨 Rendimiento (NVIDIA antigua)",
+            "label": "🐢 Compatible (NVIDIA antigua)",
             "gpu_gen": "Maxwell/Kepler",
             "compute_cap": "5.x",
-            "backend": "NCNN_VK",
-            "model": "v4.22",
+            "backend": "MVTOOLS",
+            "model": null,
             "fp16": false,
             "streams": 1,
             "workspace": null,
-            "notes": "GTX 9xx and older — Vulkan/NCNN backend"
+            "notes": "GTX 9xx y mas viejas — MVTools (TRT no soporta sm_<7.5)."
         },
         "AMD_RDNA3": {
             "label": "⚡ Balanceado (AMD RDNA3)",

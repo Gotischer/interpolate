@@ -18,8 +18,8 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.11"
-$Global:VpyTemplateVersion  = 2
+$Global:WizardVersion       = "2.1.12"
+$Global:VpyTemplateVersion  = 3
 $Global:LuaTemplateVersion  = 1
 $Global:SetHzTemplateVersion = 1
 
@@ -160,8 +160,13 @@ function Invoke-Install {
     $config.GpuProfileKey = $gpuEnv.ProfileKey
     $vsDir = Install-VapourSynth -Config $config -TargetRelease $config.VsRelease -Force
 
-    if ($backendType -ne 'MVTOOLS') {
-        # 3) vs-mlrt
+    if ($backendType -eq 'MVTOOLS') {
+        # 3) MVTools (CPU motion vectors). Plugin separado de vs-mlrt,
+        # se baja desde dubhater/vapoursynth-mvtools. Es el unico backend
+        # viable en GPUs pre-Turing (Pascal y anteriores).
+        $mlrtTag = Install-MVTools -Config $config -VsDir $vsDir
+    } else {
+        # 3) vs-mlrt (TRT / TRT_RTX / NCNN_VK / etc.)
         $mlrtTag = Install-VsMlrt -Config $config -BackendType $backendType -VsDir $vsDir
 
         # 4) Patch vsmlrt.py

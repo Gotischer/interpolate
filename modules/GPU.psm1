@@ -75,16 +75,21 @@ function Detect-GPU {
             elseif ($name -match "gtx\s*10[0-9]{2}|titan\s*xp|titan\s*x") {
                 $env.GPUGen           = "Pascal"
                 $env.ComputeCap       = "6.1"
-                # TensorRT 10 dropeo soporte de Pascal (necesita sm >= 7.5).
-                # vsmlrt-cuda no incluye nvinfer_builder_resource_sm60/61, asi
-                # que Backend.TRT falla a la hora de compilar el engine. NCNN
-                # via Vulkan corre nativo en Pascal sin esa limitacion.
-                $env.SupportedBackend = "RIFE_NCNN"
+                # Cadena de incompatibilidades en Pascal:
+                #   - TRT/TRT_RTX: TensorRT 10 dropeo sm_61 (no esta en
+                #     nvinfer_builder_resource_smXX_10.dll).
+                #   - NCNN_VK: el build de vs-mlrt no implementa GridSample,
+                #     que es operacion fundamental de RIFE.
+                #   - ORT_DML: tecnicamente carga, pero la GTX 1060 toma
+                #     100-200 ms por frame a 1080p (medido) - inviable.
+                # MVTools usa CPU motion vectors, es muy liviano y entrega
+                # interpolacion fluida en hardware viejo.
+                $env.SupportedBackend = "MVTOOLS"
                 $env.ProfileKey       = "Pascal"
             }
             else {
                 $env.GPUGen           = "NVIDIA antigua"
-                $env.SupportedBackend = "RIFE_NCNN"
+                $env.SupportedBackend = "MVTOOLS"
                 $env.ProfileKey       = "NVIDIA_Old"
             }
         }

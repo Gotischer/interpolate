@@ -418,23 +418,40 @@ $vsDirRelative\Lib\site-packages
         Write-Error "Error copiando DLLs a la carpeta de mpv: $($_.Exception.Message)"
     }
 
-    # Verificar que msvcp140.dll este disponible para mpv. VSScript.dll
-    # depende de el. Si no esta en el folder de mpv NI en System32, hay que
-    # instalar el VC++ Redistributable. Sin esto, LoadLibrary(VSScript.dll)
-    # falla con ERROR_MOD_NOT_FOUND y mpv reporta un opaco "Could not
-    # initialize VapourSynth scripting" sin que el .vpy llegue a correr.
+    # Verificar deps Win32 que VSScript.dll necesita para LoadLibrary.
+    # Sin estas, mpv reporta un opaco "Could not initialize VapourSynth
+    # scripting" sin que el .vpy llegue a ejecutarse:
+    #   - msvcp140.dll: C++ stdlib (parte del VC++ Redistributable)
+    #   - api-ms-win-crt-*.dll: Universal C Runtime (UCRT). En Win10/11
+    #     normalmente son virtuales via ApiSet schema; si faltan, el VC++
+    #     Redist tambien los provee como archivos en System32.
     $msvcpInMpv = Test-Path (Join-Path $mpvDir "msvcp140.dll")
     $msvcpInSys = Test-Path "$env:SystemRoot\System32\msvcp140.dll"
-    if (-not $msvcpInMpv -and -not $msvcpInSys) {
+    $ucrtCount = 0
+    try {
+        $ucrtCount = @(Get-ChildItem "$env:SystemRoot\System32" -Filter "api-ms-win-crt-runtime-l1-1-0.dll" -EA SilentlyContinue).Count
+    } catch {}
+
+    $missingMsvcp = (-not $msvcpInMpv -and -not $msvcpInSys)
+    # Si ucrtCount = 0 puede ser que sea virtual via ApiSet schema (Win10/11)
+    # y aun asi funcione. Solo alertamos si tambien falta msvcp140, que es
+    # la señal mas confiable de un VC++ Redist no instalado.
+    if ($missingMsvcp) {
         Write-Host ""
-        Write-Host "[!!] FALTA: msvcp140.dll (Microsoft Visual C++ Runtime)" -ForegroundColor Yellow
-        Write-Host "     VSScript.dll lo necesita para cargarse. Sin esta libreria mpv NO" -ForegroundColor Yellow
-        Write-Host "     puede inicializar VapourSynth y la interpolacion no funciona." -ForegroundColor Yellow
+        Write-Host "[!!] FALTA Visual C++ Redistributable (msvcp140.dll, api-ms-win-crt-*)" -ForegroundColor Yellow
+        Write-Host "     VSScript.dll depende de ese runtime. Sin instalarlo, mpv NO puede" -ForegroundColor Yellow
+        Write-Host "     inicializar VapourSynth y la interpolacion no funciona (el error" -ForegroundColor Yellow
+        Write-Host "     en mpv-debug.log es 'Could not initialize VapourSynth scripting'" -ForegroundColor Yellow
+        Write-Host "     sin traceback Python)." -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "     Instala el Visual C++ Redistributable (instalador oficial, gratis, 14 MB):" -ForegroundColor Cyan
+        Write-Host "     Instala el Visual C++ Redistributable (oficial, gratis, 14 MB):" -ForegroundColor Cyan
         Write-Host "       https://aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "     Despues de instalar, re-ejecuta el wizard o simplemente abre mpv." -ForegroundColor Cyan
+        Write-Host "     Si el instalador dice 'Another version is already installed'," -ForegroundColor Cyan
+        Write-Host "     entra a Programas y caracteristicas -> Microsoft Visual C++" -ForegroundColor Cyan
+        Write-Host "     2015-2022 Redistributable (x64) -> Modify -> Repair." -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "     Despues de instalar/reparar, re-ejecuta el wizard." -ForegroundColor Cyan
     }
 }
 

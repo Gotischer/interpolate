@@ -339,4 +339,78 @@ function Test-VsMlrtInstall {
     return $status
 }
 
-Export-ModuleMember -Function Install-VsMlrt, Install-VsmlrtScripts, Install-RIFEModels, Test-VsMlrtInstall
+function Install-MVTools {
+    <#
+    .SYNOPSIS
+        Descarga e instala el plugin MVTools en vs-plugins/.
+    .DESCRIPTION
+        MVTools (vapoursynth-mvtools de dubhater) no esta incluido en los
+        bundles de vs-mlrt. Se distribuye como release separado en
+        https://github.com/dubhater/vapoursynth-mvtools/releases.
+
+        Es el unico backend de interpolacion usable en GPUs pre-Turing
+        (Pascal, Maxwell, Kepler, GTX 9xx y mas viejas) porque:
+          - TRT 10 no soporta sm_<7.5
+          - NCNN no implementa GridSample (necesario para RIFE)
+          - ORT_DML es tecnicamente compatible pero demasiado lento
+
+        MVTools usa motion vectors CPU, es muy liviano (corre suave en
+        cualquier procesador moderno) y produce interpolacion de calidad
+        razonable para video general.
+    #>
+    param(
+        [hashtable]$Config,
+        [string]$VsDir
+    )
+    Write-Host "`n===> Instalando MVTools" -ForegroundColor Cyan
+
+    $pluginDir = Join-Path $VsDir "vs-plugins"
+    if (-not (Test-Path $pluginDir)) { New-Item -ItemType Directory -Path $pluginDir | Out-Null }
+
+    $rel = Get-LatestGithubRelease -Repo "dubhater/vapoursynth-mvtools"
+    if (-not $rel) { throw "No se pudo obtener release de MVTools" }
+    Write-Host "     Version: $($rel.Tag)" -ForegroundColor Gray
+
+    # Asset esperado: MVTools-v24-x86_64.7z (o similar). Filtramos por x86_64
+    # y excluimos versiones x86 (32-bit) que tambien existen en el release.
+    $asset = $rel.Assets |
+        Where-Object {
+            $_.Name -match "x86_64|x64" -and
+            $_.Name -notmatch "x86(?!_64)" -and
+            $_.Name -match "\.7z$"
+        } |
+        Select-Object -First 1
+
+    if (-not $asset) {
+        Write-Host "[!!] No encontre asset x86_64 .7z en MVTools $($rel.Tag)" -ForegroundColor Yellow
+        Write-Host "     Assets disponibles:" -ForegroundColor DarkGray
+        foreach ($a in $rel.Assets) { Write-Host "       $($a.Name)" -ForegroundColor DarkGray }
+        throw "MVTools asset not found"
+    }
+
+    $archive = Invoke-Download -FileName $asset.Name -Url $asset.Url `
+        -BaseDir $Config.BaseDir -LocalBundleDir $Config.LocalBundleDir `
+        -ExpectedSize $asset.Size
+
+    $tmpDir = Join-Path $Config.BaseDir "mvtools-tmp"
+    if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
+    Expand-7zArchive -Archive $archive -DestDir $tmpDir -BaseDir $Config.BaseDir
+
+    # Copiar la DLL (libmvtools.dll o similar) a vs-plugins/
+    $copied = 0
+    Get-ChildItem $tmpDir -Filter "*.dll" -Recurse | ForEach-Object {
+        $dest = Join-Path $pluginDir $_.Name
+        Copy-Item $_.FullName $dest -Force
+        Write-Host "     $($_.Name)" -ForegroundColor DarkGray
+        $copied++
+    }
+    Remove-Item $tmpDir -Recurse -Force -EA SilentlyContinue
+
+    if ($copied -eq 0) {
+        throw "MVTools archive no contiene DLLs"
+    }
+    Write-Host "[OK] MVTools $($rel.Tag) instalado" -ForegroundColor Green
+    return $rel.Tag
+}
+
+Export-ModuleMember -Function Install-VsMlrt, Install-VsmlrtScripts, Install-RIFEModels, Install-MVTools, Test-VsMlrtInstall
