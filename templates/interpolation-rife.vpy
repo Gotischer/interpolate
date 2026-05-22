@@ -135,6 +135,11 @@ try:
     clip = video_in
     target_fps = display_fps if display_fps and display_fps > 0 else 60.0
     src_fps    = container_fps if container_fps and container_fps > 0 else 24.0
+
+    # Asegurar que el clip tenga un framerate valido para evitar crashes en RIFE/PlaneStats
+    if clip.fps.numerator == 0 or clip.fps.denominator == 0:
+        clip = core.std.AssumeFPS(clip, fpsnum=int(src_fps * 1000 + 0.5), fpsden=1000)
+
     # Cap maximo de interpolacion. Sin cap, TV 120Hz + source 24fps fuerza
     # multi=5 que dispara peaks a 100+ ms incluso en RTX 50xx.
     MAX_RIFE_MULTI = 5

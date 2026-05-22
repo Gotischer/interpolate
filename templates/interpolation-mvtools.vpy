@@ -104,6 +104,10 @@ try:
     # ---- Input -----------------------------------------------------------
     clip = video_in
 
+    # Asegurar que el clip tenga un framerate valido para evitar crashes en MVTools/FlowFPS
+    if clip.fps.numerator == 0 or clip.fps.denominator == 0:
+        clip = core.std.AssumeFPS(clip, fpsnum=int(src_fps * 1000 + 0.5), fpsden=1000)
+
     # MVTools requiere YUV420P8 (8-bit YUV)
     if clip.format.id != vs.YUV420P8:
         clip = core.resize.Bicubic(clip, format=vs.YUV420P8)
