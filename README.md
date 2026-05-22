@@ -2,7 +2,7 @@
 
 Asistente automatizado para instalar interpolación de frames en [mpv](https://mpv.io) usando VapourSynth + RIFE (TensorRT/NCNN) o MVTools como respaldo. Convierte videos de 24/30 fps en reproducción fluida a 60/120/144 Hz.
 
-> **v2.1.0**: scene detection real (no morphing en cortes), upscale NIS post-RIFE (mismo shader que SVP), cap a 1080p para garantizar fluidez en sources 4K, cleanup de variables de entorno persistentes que rompían el `mpv.exe` directo, fixes de instalación R76 (`0x7e`, autoload API3, deps `vsmlrt`).
+> **v2.1.15**: MVTools real para GPUs pre-Turing (TRT 10 ya no soporta Pascal, NCNN no implementa GridSample en este build), env vars User-level para que `mpv.exe` directo funcione sin `mpv-vs.bat`, guard contra clips con metadata de FPS inválida (WhatsApp, capturas de teléfono), crash logger funcional en el `.vpy`, detección de VC++ Redistributable faltante. Robustez consolidada después de 15 iteraciones de debugging real con GPUs de varias generaciones.
 
 ## Descargar
 
@@ -16,44 +16,70 @@ Doble clic y listo. No requiere instalación previa.
 
 | Característica | Descripción |
 |----------------|-------------|
-| 🎮 **Multi-GPU** | NVIDIA RTX/GTX, AMD Radeon, Intel Arc, iGPU |
-| 🔄 **RIFE TensorRT** | Interpolación AI de alta calidad (NVIDIA RTX 20-50) |
-| 🌐 **RIFE NCNN/Vulkan** | Para AMD, Intel Arc, NVIDIA antiguas |
-| 🐢 **MVTools (CPU)** | Fallback universal sin GPU dedicada |
-| 🎬 **Scene Detection** | Polyfill con `PlaneStats` (sin plugins) — RIFE corta limpio en cambios de escena |
-| 🔍 **Cap 1080p + NIS upscale** | RIFE corre como máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS ≠ DLSS** — es un shader espacial público que corre en cualquier GPU (NVIDIA/AMD/Intel) |
-| 📺 **Multi-monitor** | Detecta cambios de refresh rate y re-aplica el filtro al mover la ventana |
-| 🌈 **HDR** | Interpolación HDR con preservación BT.2020/PQ/HLG y metadata MaxCLL |
-| 🔧 **Auto-update** | Notificaciones de nuevas versiones |
+| 🎮 **Backend automático según GPU** | Detecta hardware y elige el backend viable (TRT-RTX / TRT / NCNN+Vulkan / OpenVINO / MVTools) |
+| 🔄 **RIFE TensorRT-RTX** | Variante con kernels sm_120 para RTX 50xx (Blackwell) — engine compila en ~1 s vs minutos del TRT genérico |
+| 🔄 **RIFE TensorRT** | RTX 20xx/30xx/40xx — engine pre-compilado, latencia baja, throughput alto |
+| 🌐 **RIFE NCNN/Vulkan** | AMD RX modernas, Intel Arc — usa Vulkan, sin dependencias propietarias |
+| 🐢 **MVTools (CPU)** | Pascal y anteriores, AMD/Intel viejos — motion vectors clásicos, paraleliza en todos los hilos del CPU |
+| 🎬 **Scene Detection sin plugins** | Polyfill con `PlaneStats` (en core de VapourSynth) — RIFE corta limpio en cambios de escena, sin morphing |
+| 🔍 **Cap 1080p + NIS upscale** | RIFE procesa máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS ≠ DLSS** — es un shader espacial público que corre en cualquier GPU |
+| 📺 **Multi-monitor** | Detecta cambios de refresh rate y re-aplica el filtro al mover la ventana entre monitores 60/120/144 Hz |
+| 🌈 **HDR completo** | Interpolación preservando BT.2020/PQ/HLG y metadata MaxCLL/MaxFALL; toggle por sesión con `Ctrl+h` |
+| 🛡️ **Robustez de clips raros** | Guard contra fps inválida (videos de WhatsApp/captura/VFR) — el filtro normaliza antes de pasar a RIFE/MVTools |
+| 🧰 **Crash logger en el `.vpy`** | Si VapourSynth falla, escribe `interpolation.error.log` con traceback Python completo (mpv solo muestra un genérico "Could not initialize") |
+| 🌐 **Env vars User-level** | Instala variables persistentes así `mpv.exe` directo funciona — no obliga a usar `mpv-vs.bat` |
+| 🔧 **Auto-update** | Notificaciones de nuevas versiones desde GitHub |
 
 ### Soporte de GPU
 
 | GPU | Backend | Modelo | Calidad |
 |-----|---------|--------|---------|
-| RTX 5090/5080 (Blackwell) | TensorRT | v4.25 | 🏆 Máxima |
+| RTX 5090/5080/5070 (Blackwell) | TensorRT | v4.25 | 🏆 Máxima |
 | RTX 4090-4060 (Ada) | TensorRT | v4.25 | 🏆 Máxima |
 | RTX 3090-3050 (Ampere) | TensorRT | v4.25 | 🏆 Máxima |
 | RTX 2080-2060 (Turing) | TensorRT | v4.25 | ⚡ Balanceado |
-| GTX 1080-1050 (Pascal) | TensorRT | v4.25 | 💨 Rendimiento |
+| **GTX 1080-1050 (Pascal)** | **MVTools (CPU)** | — | 🐢 Compatible |
+| **GTX 9xx y más viejas** | **MVTools (CPU)** | — | 🐢 Compatible |
 | AMD RX 7xxx (RDNA3) | NCNN/Vulkan | v4.25 | ⚡ Balanceado |
 | AMD RX 6xxx (RDNA2) | NCNN/Vulkan | v4.22 | 💨 Rendimiento |
 | Intel Arc | NCNN/Vulkan | v4.22 | ⚡ Balanceado |
-| iGPU / Otras | MVTools | — | 🐢 Básica |
+| iGPU / sin GPU dedicada | MVTools (CPU) | — | 🐢 Básica |
 
-`v4.25` (no `_heavy`) es el default desde v2.1 para garantizar fluidez 4K@60 en RTX 30/40/50 incluso con HDR. Si tu uso es exclusivamente ≤1080p y querés calidad máxima podés editar `interpolation.vpy` y cambiar `RIFEModel.v4_25` por `RIFEModel.v4_25_heavy`.
+**Por qué Pascal y anteriores van a MVTools, no a RIFE:**
+
+- **TensorRT 10** dropeó soporte de compute capability < 7.5. Los `nvinfer_builder_resource_smXX_10.dll` que ship vs-mlrt cubren `sm_75` (Turing) hasta `sm_120` (Blackwell). No hay `sm_61` (Pascal) ni `sm_52` (Maxwell). Engine compile falla.
+- **NCNN/Vulkan** carga bien en Pascal pero el build oficial de vs-mlrt no implementa `GridSample`, que es la operación core de RIFE (warping basado en optical flow). El modelo carga pero no puede ejecutar.
+- **ORT_DML** técnicamente funciona en cualquier GPU con DirectX 12 (Pascal incluido), pero medido en una GTX 1060 a 1080p toma 100-200 ms por frame — inviable a 60 Hz.
+- **MVTools** corre en CPU con motion vectors clásicos. En un Ryzen 7 2700X (8c/16t) procesa 1080p × 2 fluido sin tocar la GPU. Calidad menor que RIFE pero **fluidez garantizada** en hardware donde RIFE no es opción.
+
+`v4.25` (no `_heavy`) es el default para garantizar fluidez 4K@60 en RTX 30/40/50 incluso con HDR. Si tu uso es exclusivamente ≤1080p y querés calidad máxima podés editar `interpolation.vpy` y cambiar `RIFEModel.v4_25` por `RIFEModel.v4_25_heavy`.
 
 ## Requisitos
 
-- **Windows 10 o superior**
+### Obligatorios (todos los backends)
+
+- **Windows 10 o superior** (x64).
+- **Visual C++ Redistributable 2015-2022 (x64)** — **CRÍTICO**. Sin esto, `VSScript.dll` no carga y mpv reporta el opaco "Could not initialize VapourSynth scripting" sin más info. Si el instalador dice "Another version is already installed" pero el sistema sigue fallando, ir a Programas → Microsoft Visual C++ 2015-2022 Redistributable (x64) → Modificar → **Reparar**.
+  - Descarga oficial (14 MB): [aka.ms/vs/17/release/vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 - **mpv build con VapourSynth habilitado** — el wizard se prueba contra los builds de [**shinchiro**](https://github.com/shinchiro/mpv-winbuild-cmake/releases). Los builds oficiales de mpv.io **no incluyen** VapourSynth.
   - Bajá el `.7z` que corresponda a tu CPU:
     - `mpv-x86_64-v3-YYYYMMDD-git-XXXXXXX.7z` — recomendado en CPU moderna (Intel Haswell+ / AMD Zen+, con AVX2).
     - `mpv-x86_64-YYYYMMDD-git-XXXXXXX.7z` — baseline, para CPU previa a 2013.
-  - Mínimo: cualquier release de 2025 en adelante (necesita API de VapourSynth R76).
-  - Extraé el `.7z` a una carpeta (ej. `H:\mpv\`) y dejá los archivos sueltos ahí — esa será la ruta a `mpv.exe` que pide el wizard.
-- **~7 GB libres en disco** para VapourSynth + vs-mlrt + modelos RIFE
-- **Driver NVIDIA reciente** (solo si vas a usar RIFE TensorRT — recomendado: NVIDIA Game Ready/Studio 560+ para RTX 50xx, 550+ para RTX 30/40xx)
-- **Python embed 3.13.x** — lo descarga el wizard automáticamente (no hace falta tenerlo instalado)
+  - Mínimo: cualquier release de **mayo 2026 en adelante** (los builds previos no incluyen MSVC runtimes bundleados; el wizard intenta copiarlos del portable de VapourSynth pero no siempre tiene todos).
+  - Extraé el `.7z` a una carpeta (ej. `H:\mpv\` o `D:\Software\mpv\`) y dejá los archivos sueltos ahí — esa será la ruta a `mpv.exe` que pide el wizard.
+- **Python embed 3.13.x** — lo descarga el wizard automáticamente (no hace falta tenerlo instalado en el sistema).
+
+### Según backend
+
+| Backend | GPU/CPU | Espacio en disco |
+|---|---|---|
+| **TensorRT-RTX** | NVIDIA RTX 50xx con driver 560+ | ~7 GB (CUDA + TRT + modelos RIFE) |
+| **TensorRT** | NVIDIA RTX 20/30/40xx con driver 550+ | ~7 GB |
+| **NCNN/Vulkan** | AMD RX 6xxx+, Intel Arc, drivers actualizados con Vulkan 1.3 | ~2 GB |
+| **OpenVINO** | Intel iGPU / CPU x86_64 | ~1.5 GB |
+| **MVTools (CPU)** | Cualquier CPU moderna multi-core (Ryzen 5+ / Intel 4c+) | ~600 MB |
+
+MVTools no requiere GPU; corre nativo en CPU. Recomendado: 8+ hilos lógicos para procesar 1080p × 2 en tiempo real con buen margen.
 
 ## Cómo se usa
 
@@ -111,18 +137,36 @@ Cobertura por formato HDR:
 
 ## Cómo se interpola (pipeline real)
 
+**Path RIFE (RTX 20xx+, AMD modernas, Intel Arc):**
 ```
-Source (cualquier res) ──┐
-                         ├─→ Downscale a max 1920×1080 (RGBH)
-                         ├─→ Scene detection (PlaneStats)
-                         ├─→ RIFE (TRT/NCNN) × multi
-                         ├─→ Convert YUV420P10
-                         └─→ mpv VO + NVScaler.glsl ──→ Display nativo
+Source ──┐
+         ├─→ AssumeFPS (si fps inválida)
+         ├─→ Downscale a max 1920×1080 (RGBS, fp32)
+         ├─→ Scene detection (PlaneStats)
+         ├─→ Pad mod32
+         ├─→ RIFE (TRT/TRT-RTX/NCNN/OV) × multi (cap 5)
+         ├─→ Crop + convert YUV420P10
+         └─→ mpv VO + NVScaler.glsl ──→ Display nativo
 ```
 
-- **Cap a 1080p**: garantiza fluidez en GPU normal incluso con sources 4K/UHD.
-- **Multi máximo 5×**: para 24 fps + 120 Hz da exactos 120 fps, sin sobrecargar la GPU con 6×.
+**Path MVTools (Pascal, GTX 9xx, iGPU, CPU-only):**
+```
+Source ──┐
+         ├─→ AssumeFPS (si fps inválida)
+         ├─→ Convert YUV420P8
+         ├─→ mv.Super (pirámide de motion vectors)
+         ├─→ mv.Analyse (forward + backward)
+         ├─→ mv.FlowFPS × multi (cap 2-3)
+         ├─→ Convert YUV420P10
+         └─→ mpv VO ──→ Display nativo
+```
+
+- **Cap a 1080p (RIFE)**: garantiza fluidez en cualquier GPU compatible incluso con sources 4K/UHD.
+- **Multi máximo 5× (RIFE)**: para 24 fps + 120 Hz da exactos 120 fps, sin sobrecargar la GPU con 6×.
+- **Multi máximo 2× (MVTools)**: motion vectors clásicos son más caros que RIFE neural por frame; 24→48 fps mantiene CPU debajo de 50% en Ryzen 7.
+- **AssumeFPS guard**: si el clip viene con `fps = 0/0` (típico de WhatsApp y VFR), se normaliza a `container_fps` antes de procesarlo — evita crashes en RIFE/MVTools que requieren fps válida.
 - **NIS upscale**: mpv hace el upscale espacial final al display real con el shader público de NVIDIA — mismo que usa SVP.
+- **Crash logger**: cualquier excepción Python durante la evaluación del `.vpy` se captura y escribe a `<portable_config>/interpolation.error.log` con traceback completo, Python version, sys.path y env vars relevantes — útil para diagnóstico cuando mpv solo dice "Could not initialize VapourSynth scripting".
 
 ### NIS ≠ DLSS (toda la familia DLSS)
 
@@ -192,9 +236,44 @@ Get-FileHash MPV-Interp-Wizard.bat -Algorithm SHA256
 
 Compara con el contenido de `SHA256.txt` publicado en la release.
 
+## Solución de problemas comunes
+
+### `"Could not initialize VapourSynth scripting"` en mpv-debug.log
+
+mpv no puede cargar `VSScript.dll`. Causas en orden de probabilidad:
+
+1. **Falta Visual C++ Redistributable 2015-2022 (x64)** — descarga e instala desde [aka.ms/vs/17/release/vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe). Si dice "already installed", entrá a Programas instalados, click derecho → Modificar → **Reparar**.
+2. **mpv build sin VapourSynth habilitado** — los builds oficiales de mpv.io NO sirven. Usar shinchiro.
+3. **`interpolation.vpy` con BOM** (instalaciones < v2.1.9 generaban el archivo con UTF-8 BOM, lo que rompe el parser Python) — abrí el `.vpy` con Notepad++ / VSCode y guardalo como UTF-8 SIN BOM, o ejecutá Reparar → Regenerar `interpolation.vpy` con el wizard actualizado.
+
+### No se genera `interpolation.error.log`
+
+Significa que el `.vpy` ni siquiera llega a ejecutarse — el problema está antes (carga de VSScript.dll o dependencias). Verificá VC++ Redist (punto 1 de arriba).
+
+### El video va a 7-10 fps en una GPU vieja
+
+RIFE neural no es viable en GPUs pre-Turing (TRT 10 dropeó Pascal, NCNN no tiene GridSample, ORT_DML es muy lento). El wizard a partir de v2.1.12 detecta esto y enruta automáticamente a MVTools. Si tu instalación es vieja y todavía usa RIFE, ejecutá el wizard actualizado → **Reinstalar**.
+
+### `"GridSample not supported yet!"` con NCNN/Vulkan
+
+El build de NCNN en vs-mlrt no implementa esa operación. RIFE no puede ejecutarse. Solución: el wizard auto-detecta esto en hardware afectado y selecciona MVTools.
+
+### mpv.exe directo no funciona pero `mpv-vs.bat` sí
+
+Te falta el set de variables de entorno. v2.1.14+ las setea a nivel User automáticamente durante Install. Si tenés una instalación previa, ejecutá Reparar → **Setear variables de entorno User**. Después cerrá sesión y volvé a entrar (Explorer y los terminales heredan las nuevas vars al arrancar).
+
+### Mensaje sobre "fps no válido" o crashes con videos de WhatsApp
+
+v2.1.15+ tiene un guard que normaliza el framerate con `AssumeFPS` cuando el clip viene sin metadata válida (caso típico de WhatsApp, capturas de teléfono, screen recordings con VFR). Si tu `.vpy` es de una versión anterior, ejecutá Reparar → Regenerar `interpolation.vpy`.
+
 ## Reportar problemas
 
-Abre un [issue](https://github.com/Gotischer/interpolate/issues) e incluye `mpv-interp-wizard.log`.
+Abre un [issue](https://github.com/Gotischer/interpolate/issues) e incluye:
+
+1. `mpv-interp-wizard.log` (del wizard)
+2. `mpv-debug.log` con `--msg-level=vapoursynth=v --log-file=mpv-debug.log`
+3. `<portable_config>/interpolation.error.log` si existe (traceback Python real)
+4. Salida de Diagnóstico desde el wizard
 
 ## Licencia
 
