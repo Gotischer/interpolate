@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  Config.psm1 — Configuration management
 #
 #  Handles: loading, saving, validation, and first-time setup of the wizard
@@ -131,14 +131,28 @@ function Set-CachedRelease {
 }
 
 function Get-LatestGithubRelease {
-    param([string]$Repo)
+    param(
+        [string]$Repo,
+        [string]$RequireAssetMatch = $null
+    )
     $cached = Get-CachedRelease -Repo $Repo
     if ($cached) { return $cached }
 
     try {
-        $apiUrl  = "https://api.github.com/repos/$Repo/releases/latest"
         $headers = @{ "Accept" = "application/vnd.github.v3+json"; "User-Agent" = "mpv-interp-wizard" }
-        $json    = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15
+        
+        if ($RequireAssetMatch) {
+            $apiUrl = "https://api.github.com/repos/$Repo/releases"
+            $jsonList = @(Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15)
+            $json = $jsonList | Where-Object {
+                $assets = @($_.assets)
+                $assets | Where-Object { $_.name -like $RequireAssetMatch }
+            } | Select-Object -First 1
+        } else {
+            $apiUrl  = "https://api.github.com/repos/$Repo/releases/latest"
+            $json    = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15
+        }
+
         if ($json) {
             $release = [PSCustomObject]@{
                 Tag       = $json.tag_name

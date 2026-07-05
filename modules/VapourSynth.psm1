@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  VapourSynth.psm1 — VapourSynth portable installation and management
 #
 #  Handles: download, extraction, and verification of VapourSynth R76+
@@ -48,7 +48,7 @@ function Install-VapourSynth {
 
     # Get latest release info
     $repo = "vapoursynth/vapoursynth"
-    $rel  = Get-LatestGithubRelease -Repo $repo
+    $rel  = Get-LatestGithubRelease -Repo $repo -RequireAssetMatch "VapourSynth64-Portable-*.zip"
 
     if (-not $rel) {
         Write-Host "[!!] No se pudo obtener info de release, usando URL directa" -ForegroundColor Yellow

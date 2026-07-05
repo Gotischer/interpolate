@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  Updater.psm1 — Auto-update for wizard and components
 #
 #  Checks GitHub for newer versions of: wizard, VapourSynth, vs-mlrt.
@@ -39,7 +39,7 @@ function Test-Updates {
     }
 
     # 2) VapourSynth
-    $vsRel = Get-LatestGithubRelease -Repo "vapoursynth/vapoursynth"
+    $vsRel = Get-LatestGithubRelease -Repo "vapoursynth/vapoursynth" -RequireAssetMatch "VapourSynth64-Portable-*.zip"
     if ($vsRel) {
         $cmp = Compare-Versions -A $Config.VsRelease -B $vsRel.Tag
         if ($cmp -lt 0) {
