@@ -2,9 +2,11 @@
 
 Asistente automatizado para instalar interpolación de frames en [mpv](https://mpv.io) usando VapourSynth + RIFE (TensorRT/NCNN) o MVTools como respaldo. Convierte videos de 24/30 fps en reproducción fluida a 60/120/144 Hz.
 
-> **v2.1.20**: Corrección en la descarga de RIFE: se agregó `ensemble_v1` para descargar los modelos ONNX que soportan `multi=True`, evitando el crash `Dimension mismatch` de TensorRT.
-> **v2.1.16**: Validación añadida a GitHub API para ignorar releases de dependencias sin binarios compilados (corrige error 404 con VapourSynth R77).
-> **v2.1.15**: MVTools real para GPUs pre-Turing (TRT 10 ya no soporta Pascal, NCNN no implementa GridSample en este build), env vars User-level para que `mpv.exe` directo funcione sin `mpv-vs.bat`, guard contra clips con metadata de FPS inválida (WhatsApp, capturas de teléfono), crash logger funcional en el `.vpy`, detección de VC++ Redistributable faltante. Robustez consolidada después de 15 iteraciones de debugging real con GPUs de varias generaciones.
+## Changelog
+- **v2.1.21**: Se parchea `vsmlrt.py` para solucionar un crash en TensorRT (`API Usage Error: Dimension mismatch`) cuando se usan modelos regulares de 7 canales (ej. `v4.25_heavy`) en lugar de los modelos ensemble de 11 canales introducidos en `vs-mlrt` v31.
+- **v2.1.20**: Se agregó `ensemble_v1` a la instalación de modelos requeridos de RIFE y se solucionó límite de paginación de la API de GitHub al buscar releases.
+- **v2.1.16**: Validación añadida a GitHub API para ignorar releases de dependencias sin binarios compilados (corrige error 404 con VapourSynth R77).
+- **v2.1.15**: MVTools real para GPUs pre-Turing (TRT 10 ya no soporta Pascal, NCNN no implementa GridSample en este build), env vars User-level para que `mpv.exe` directo funcione sin `mpv-vs.bat`, guard contra clips con metadata de FPS inválida (WhatsApp, capturas de teléfono), crash logger funcional en el `.vpy`, detección de VC++ Redistributable faltante. Robustez consolidada después de 15 iteraciones de debugging real con GPUs de varias generaciones.
 
 ## Descargar
 

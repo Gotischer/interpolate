@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  Patcher.psm1 — Robust patching of vsmlrt.py
 #
 #  Patches the vs-mlrt Python module to:
@@ -96,6 +96,19 @@ function Invoke-VsmlrtPatch {
     # --- Patch 6: Remove flexible_output=True ---
     if ($content -match 'flexible_output=True') {
         $content = $content -replace ',?\s*flexible_output=True', ''
+        $patchCount++
+    }
+
+    # --- Patch 7: Fix vsmlrt v31 passing 11 channels to 7-channel models ---
+    $p7_pattern = '(?m)^(\s*)clips = \[clipa, clipb, mask, \*get_rife_input\(clipa\)\]\s*$'
+    if ($content -match $p7_pattern -and $content -notmatch 'if ensemble or "_ensemble" in version:') {
+        $p7_replace = @'
+$1if ensemble or "_ensemble" in version:
+$1    clips = [clipa, clipb, mask, *get_rife_input(clipa)]
+$1else:
+$1    clips = [clipa, clipb, mask]
+'@
+        $content = [regex]::Replace($content, $p7_pattern, ($p7_replace -replace '\$', '$$$$'))
         $patchCount++
     }
 
