@@ -216,7 +216,7 @@ function Install-RIFEModels {
     param(
         [hashtable]$Config,
         [string]$VsDir,
-        [string[]]$Models = @("v4.25_heavy", "v4.25")
+        [string[]]$Models = @("v4.25_heavy", "v4.25", "ensemble_v1")
     )
 
     $pluginDir = Join-Path $VsDir "vs-plugins"
@@ -234,7 +234,7 @@ function Install-RIFEModels {
     # Check which models are already installed
     $missing = @()
     foreach ($m in $Models) {
-        $onnxPattern = "rife_$($m -replace '_', '_')*"
+        $onnxPattern = if ($m -eq "ensemble_v1") { "*ensemble_op20*" } else { "rife_$($m -replace '_', '_')*" }
         $existing = Get-ChildItem $rifeDir -Filter $onnxPattern -EA SilentlyContinue
         if (-not $existing -or $existing.Count -eq 0) { $missing += $m }
         else { Write-Host "     $m ya instalado ($($existing.Count) archivos)" -ForegroundColor Gray }
