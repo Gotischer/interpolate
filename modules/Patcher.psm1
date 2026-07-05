@@ -108,7 +108,7 @@ $1    clips = [clipa, clipb, mask, *get_rife_input(clipa)]
 $1else:
 $1    clips = [clipa, clipb, mask]
 '@
-        $content = [regex]::Replace($content, $p7_pattern, ($p7_replace -replace '\$', '$$$$'))
+        $content = [regex]::Replace($content, $p7_pattern, $p7_replace)
         $patchCount++
     }
 
