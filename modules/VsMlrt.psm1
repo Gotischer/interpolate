@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  VsMlrt.psm1 — vs-mlrt bundle installation (RIFE + TensorRT/NCNN)
 #
 #  Handles: download (split archives .001/.002), extraction, model installation,
@@ -227,7 +227,7 @@ function Install-RIFEModels {
     Write-Host "`n===> Instalando modelos RIFE" -ForegroundColor Cyan
 
     $repo = "AmusementClub/vs-mlrt"
-    $rel  = Get-LatestGithubRelease -Repo $repo
+    $rel  = Get-LatestGithubRelease -Repo $repo -RequireAssetMatch "rife_*.7z"
 
     if (-not $rel) { throw "No se pudo obtener releases de vs-mlrt" }
 
