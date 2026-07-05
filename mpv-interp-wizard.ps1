@@ -18,7 +18,7 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.19"
+$Global:WizardVersion       = "2.1.20"
 $Global:VpyTemplateVersion  = 3
 $Global:LuaTemplateVersion  = 1
 $Global:SetHzTemplateVersion = 1
