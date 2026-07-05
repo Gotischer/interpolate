@@ -2,7 +2,7 @@
 
 Asistente automatizado para instalar interpolación de frames en [mpv](https://mpv.io) usando VapourSynth + RIFE (TensorRT/NCNN) o MVTools como respaldo. Convierte videos de 24/30 fps en reproducción fluida a 60/120/144 Hz.
 
-> **v2.1.17**: Corrección en la descarga de los modelos ONNX de RIFE (ignoraba el release external-models).
+> **v2.1.18**: Fix a bug en la caché de releases de GitHub que causaba que `-RequireAssetMatch` devolviera versiones incorrectas ya cacheadas.
 > **v2.1.16**: Validación añadida a GitHub API para ignorar releases de dependencias sin binarios compilados (corrige error 404 con VapourSynth R77).
 > **v2.1.15**: MVTools real para GPUs pre-Turing (TRT 10 ya no soporta Pascal, NCNN no implementa GridSample en este build), env vars User-level para que `mpv.exe` directo funcione sin `mpv-vs.bat`, guard contra clips con metadata de FPS inválida (WhatsApp, capturas de teléfono), crash logger funcional en el `.vpy`, detección de VC++ Redistributable faltante. Robustez consolidada después de 15 iteraciones de debugging real con GPUs de varias generaciones.
 

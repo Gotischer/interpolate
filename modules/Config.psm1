@@ -99,13 +99,15 @@ function Get-UpdateCacheFilePath {
 }
 
 function Get-CachedRelease {
-    param([string]$Repo, [string]$CachePath)
+    param([string]$Repo, [string]$RequireAssetMatch = $null, [string]$CachePath)
     if (-not $CachePath) { $CachePath = Get-UpdateCacheFilePath }
     if (-not (Test-Path $CachePath)) { return $null }
 
+    $cacheKey = if ($RequireAssetMatch) { "$Repo|$RequireAssetMatch" } else { $Repo }
+
     try {
         $cache = Get-Content $CachePath -Raw | ConvertFrom-Json
-        $entry = $cache.$Repo
+        $entry = $cache.$cacheKey
         if ($entry -and $entry.Timestamp -gt (Get-Date).AddHours(-24).Ticks -and $entry.Assets) {
             return $entry
         }
@@ -114,8 +116,10 @@ function Get-CachedRelease {
 }
 
 function Set-CachedRelease {
-    param([string]$Repo, [PSCustomObject]$Release, [string]$CachePath)
+    param([string]$Repo, [PSCustomObject]$Release, [string]$RequireAssetMatch = $null, [string]$CachePath)
     if (-not $CachePath) { $CachePath = Get-UpdateCacheFilePath }
+
+    $cacheKey = if ($RequireAssetMatch) { "$Repo|$RequireAssetMatch" } else { $Repo }
 
     $cache = @{}
     if (Test-Path $CachePath) {
@@ -126,7 +130,7 @@ function Set-CachedRelease {
             }
         } catch {}
     }
-    $cache[$Repo] = $Release
+    $cache[$cacheKey] = $Release
     [PSCustomObject]$cache | ConvertTo-Json -Depth 10 | Set-Content $CachePath -Encoding UTF8
 }
 
@@ -135,7 +139,7 @@ function Get-LatestGithubRelease {
         [string]$Repo,
         [string]$RequireAssetMatch = $null
     )
-    $cached = Get-CachedRelease -Repo $Repo
+    $cached = Get-CachedRelease -Repo $Repo -RequireAssetMatch $RequireAssetMatch
     if ($cached) { return $cached }
 
     try {
@@ -162,7 +166,7 @@ function Get-LatestGithubRelease {
                     [PSCustomObject]@{ Name = $_.name; Url = $_.browser_download_url; Size = $_.size }
                 })
             }
-            Set-CachedRelease -Repo $Repo -Release $release
+            Set-CachedRelease -Repo $Repo -Release $release -RequireAssetMatch $RequireAssetMatch
             return $release
         }
     } catch {
