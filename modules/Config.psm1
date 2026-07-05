@@ -146,7 +146,7 @@ function Get-LatestGithubRelease {
         $headers = @{ "Accept" = "application/vnd.github.v3+json"; "User-Agent" = "mpv-interp-wizard" }
         
         if ($RequireAssetMatch) {
-            $apiUrl = "https://api.github.com/repos/$Repo/releases"
+            $apiUrl = "https://api.github.com/repos/$Repo/releases?per_page=100"
             $jsonList = @(Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15)
             $json = $jsonList | Where-Object {
                 $assets = @($_.assets)
