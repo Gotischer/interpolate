@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  GPU.psm1 — GPU detection, backend selection, and profile matching
 #
 #  Detects: GPU model, vendor, generation, compute capability, driver version.
@@ -21,6 +21,7 @@ function Detect-GPU {
         SupportedBackend = $null
         DriverVersion    = $null
         ProfileKey       = "Fallback"
+        FrucEligible     = $false
     }
 
     try {
@@ -52,18 +53,21 @@ function Detect-GPU {
                 $env.GPUGen           = "Blackwell"
                 $env.ComputeCap       = "12.0"
                 $env.SupportedBackend = "RIFE_TRT"
+                $env.FrucEligible     = $true
                 $env.ProfileKey       = "Blackwell"
             }
             elseif ($name -match "rtx\s*40[0-9]{2}") {
                 $env.GPUGen           = "Ada Lovelace"
                 $env.ComputeCap       = "8.9"
                 $env.SupportedBackend = "RIFE_TRT"
+                $env.FrucEligible     = $true
                 $env.ProfileKey       = "Ada"
             }
             elseif ($name -match "rtx\s*30[0-9]{2}") {
                 $env.GPUGen           = "Ampere"
                 $env.ComputeCap       = "8.6"
                 $env.SupportedBackend = "RIFE_TRT"
+                $env.FrucEligible     = $true
                 $env.ProfileKey       = "Ampere"
             }
             elseif ($name -match "rtx\s*20[0-9]{2}|gtx\s*16[0-9]{2}|titan\s*rtx") {

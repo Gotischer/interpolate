@@ -18,9 +18,9 @@ try {
 } catch {}
 
 # --- Versioning --------------------------------------------------------------
-$Global:WizardVersion       = "2.1.21"
+$Global:WizardVersion       = "2.2.0"
 $Global:VpyTemplateVersion  = 3
-$Global:LuaTemplateVersion  = 1
+$Global:LuaTemplateVersion  = 2
 $Global:SetHzTemplateVersion = 1
 
 # --- Determine script root (works from .bat too) -----------------------------
@@ -38,6 +38,7 @@ Import-Module (Join-Path $modulesDir "Patcher.psm1")      -Force -DisableNameChe
 Import-Module (Join-Path $modulesDir "Templates.psm1")    -Force -DisableNameChecking
 Import-Module (Join-Path $modulesDir "Updater.psm1")      -Force -DisableNameChecking
 Import-Module (Join-Path $modulesDir "Diagnostics.psm1")  -Force -DisableNameChecking
+Import-Module (Join-Path $modulesDir "FFmpegDetect.psm1")  -Force -DisableNameChecking
 
 # --- Start transcript for logging ---------------------------------------------
 # PowerShell 5.1's Start-Transcript writes ANSI/Windows-1252 by default while
@@ -69,10 +70,11 @@ function Show-Welcome {
     Write-Host ''
     Write-Host '  Que va a pasar:' -ForegroundColor Cyan
     Write-Host '    1. Detecta tu GPU y elige el mejor backend' -ForegroundColor Gray
+    Write-Host '       - NVIDIA RTX 30-50 -> FRUC Vulkan (nativo, 0 dependencias)' -ForegroundColor DarkGray
     Write-Host '       - NVIDIA RTX 20-50 -> RIFE con TensorRT (calidad alta)' -ForegroundColor DarkGray
     Write-Host '       - AMD / Intel Arc  -> RIFE con NCNN/Vulkan' -ForegroundColor DarkGray
     Write-Host '       - iGPU / sin GPU   -> MVTools (CPU, calidad basica)' -ForegroundColor DarkGray
-    Write-Host '    2. Te pregunta donde instalar (~5-7 GB)' -ForegroundColor Gray
+    Write-Host '    2. Te pregunta donde instalar (~5-7 GB para RIFE, ~0 para FRUC)' -ForegroundColor Gray
     Write-Host '    3. Descarga e instala VapourSynth + RIFE + modelos' -ForegroundColor Gray
     Write-Host '    4. Configura mpv para usarlo automaticamente' -ForegroundColor Gray
     Write-Host ''
@@ -155,6 +157,70 @@ function Invoke-Install {
         default     { 'MVTOOLS' }
     }
 
+    # 1b) FRUC mode selector — offer native FRUC for eligible GPUs
+    $frucAvailable = $false
+    if ($gpuEnv.FrucEligible) {
+        $frucAvailable = Test-FrucVulkanAvailable -MpvExe $config.MpvExe
+    }
+
+    if ($frucAvailable) {
+        Write-Host ''
+        Write-Host '  Tu GPU soporta FRUC Vulkan (interpolacion nativa por hardware).' -ForegroundColor Green
+        Write-Host '  Puedes elegir entre:' -ForegroundColor White
+        Write-Host ''
+        $installMode = Show-Menu -Title 'Modo de instalacion' -Options @(
+            'Instalacion Nativa (FRUC Vulkan) - 0 dependencias, listo en 5 segundos',
+            'Instalacion Completa AI (RIFE TensorRT) - maxima calidad (~7 GB, 10-30 min)',
+            'MVTools (CPU only) - fallback universal'
+        )
+        switch ($installMode) {
+            0 { $backendType = 'FRUC_VK' }
+            # 1 = keep $backendType as TRT (default for NVIDIA)
+            2 { $backendType = 'MVTOOLS' }
+        }
+    }
+
+    # --- FRUC Vulkan lightweight install path --------------------------------
+    if ($backendType -eq 'FRUC_VK') {
+        Write-Section 'Instalacion Nativa (FRUC Vulkan)'
+        Write-Info 'No se necesita VapourSynth, Python, TensorRT ni modelos AI.'
+        Write-Info 'Todo corre nativo en FFmpeg/mpv usando el Optical Flow de tu GPU.'
+        Write-Host ''
+
+        # Generate auto_mode.lua with FRUC backend
+        $concurrent = 1  # not relevant for FRUC but needed for template
+        New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
+            -Buffered 8 -Concurrent $concurrent `
+            -BackendMode 'fruc_vulkan' -FrucEligible $true `
+            -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
+
+        New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
+            -WizardVersion $Global:WizardVersion -SetHzTemplateVersion $Global:SetHzTemplateVersion
+
+        # NIS shader for upscale
+        Install-NisShader -DestDir $config.MpvConfigDir -Force | Out-Null
+
+        # Save config
+        $config.ActiveBackend = 'FRUC_VK'
+        Export-WizardConfig -Config $config -Path $configPath | Out-Null
+
+        Write-Host ''
+        Write-Title 'INSTALACION NATIVA COMPLETA!'
+        Write-Host '  FRUC Vulkan configurado. Abre cualquier video con mpv.' -ForegroundColor Green
+        Write-Host '  No necesitas cerrar sesion ni reiniciar.' -ForegroundColor Green
+        Write-Host ''
+        Write-Host '  Atajos en mpv:' -ForegroundColor Cyan
+        Write-Host '    Ctrl+i       -> Toggle interpolacion ON/OFF' -ForegroundColor Gray
+        Write-Host '    Ctrl+b       -> Cambiar backend (FRUC <-> RIFE si esta instalado)' -ForegroundColor Gray
+        Write-Host '    Ctrl+h       -> Toggle interpolacion HDR ON/OFF' -ForegroundColor Gray
+        Write-Host '    Ctrl+Shift+d -> Mostrar info de diagnostico' -ForegroundColor Gray
+        Write-Host ''
+        Wait-Continue
+        return
+    }
+
+    # --- Standard install path (RIFE / MVTools) -----------------------------
+
     # 2) VapourSynth — pasamos GpuProfileKey para que Install-VapourSynth
     # decida si instalar las deps de TRT_RTX (solo Blackwell las necesita).
     $config.GpuProfileKey = $gpuEnv.ProfileKey
@@ -182,6 +248,10 @@ function Invoke-Install {
         Install-RIFEModels -Config $config -VsDir $vsDir -Models $modelsToInstall
     }
 
+    # Determine backend mode for auto_mode.lua
+    $backendMode = 'vapoursynth'
+    $frucElig = $gpuEnv.FrucEligible -and $frucAvailable
+
     # 6) Generate config files
     New-InterpolationVpy -BackendType $backendType -Profile $profile -Config $config `
         -DestDir $config.MpvConfigDir -Force -WizardVersion $Global:WizardVersion `
@@ -190,6 +260,7 @@ function Invoke-Install {
     $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
     New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
         -Buffered 16 -Concurrent $concurrent `
+        -BackendMode $backendMode -FrucEligible $frucElig `
         -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
 
     New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
@@ -209,6 +280,7 @@ function Invoke-Install {
 
     # 8) Update config with installed versions
     if ($mlrtTag) { $config.MlrtVersion = $mlrtTag }
+    $config.ActiveBackend = $backendType
     Export-WizardConfig -Config $config -Path $configPath | Out-Null
 
     Write-Host ''
@@ -219,6 +291,7 @@ function Invoke-Install {
     Write-Host ''
     Write-Host '  Atajos en mpv:' -ForegroundColor Cyan
     Write-Host '    Ctrl+i       -> Toggle interpolacion ON/OFF' -ForegroundColor Gray
+    Write-Host '    Ctrl+b       -> Cambiar backend (FRUC <-> RIFE)' -ForegroundColor Gray
     Write-Host '    Ctrl+h       -> Toggle interpolacion HDR ON/OFF' -ForegroundColor Gray
     Write-Host '    Ctrl+Shift+d -> Mostrar info de diagnostico' -ForegroundColor Gray
     Write-Host ''
@@ -232,9 +305,17 @@ function Invoke-Repair {
     Clear-Host
     Write-Title 'REPARAR INSTALACION'
 
+    # Determine FRUC availability for this GPU
+    $frucAvailable = $false
+    if ($gpuEnv.FrucEligible) {
+        $frucAvailable = Test-FrucVulkanAvailable -MpvExe $config.MpvExe
+    }
+    $currentBackend = if ($config.ActiveBackend) { $config.ActiveBackend } else { $gpuEnv.SupportedBackend }
+
     $items = @(
         'Regenerar interpolation.vpy',
         'Regenerar auto_mode.lua',
+        'Cambiar backend (RIFE / FRUC Vulkan / MVTools)',
         'Re-parchear vsmlrt.py',
         'Reinstalar modelos RIFE',
         'Setear variables de entorno User (mpv.exe directo va a funcionar)',
@@ -250,6 +331,11 @@ function Invoke-Repair {
         'RIFE_NCNN' { 'NCNN_VK' }
         default     { 'MVTOOLS' }
     }
+    # Use saved backend if available
+    if ($config.ActiveBackend -eq 'FRUC_VK') { $backendType = 'FRUC_VK' }
+
+    # Compute backend mode for auto_mode.lua
+    $backendMode = if ($backendType -eq 'FRUC_VK') { 'fruc_vulkan' } else { 'vapoursynth' }
 
     switch ($choice) {
         0 {
@@ -261,9 +347,71 @@ function Invoke-Repair {
             $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
             New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
                 -Buffered 16 -Concurrent $concurrent `
+                -BackendMode $backendMode -FrucEligible $frucAvailable `
                 -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
         }
         2 {
+            # --- Cambiar backend ---
+            $options = @()
+            if ($frucAvailable) {
+                $options += 'FRUC Vulkan (Instalacion Nativa — 0 dependencias)'
+            }
+            if ($gpuEnv.SupportedBackend -eq 'RIFE_TRT') {
+                $options += 'RIFE TensorRT (AI — maxima calidad)'
+            } elseif ($gpuEnv.SupportedBackend -eq 'RIFE_NCNN') {
+                $options += 'RIFE NCNN/Vulkan (AI)'
+            }
+            $options += 'MVTools (CPU only)'
+            $options += 'Cancelar'
+
+            $bc = Show-Menu -Title "Backend actual: $currentBackend — cambiar a:" -Options $options
+            $newBackend = $null
+
+            foreach ($i in 0..($options.Count - 1)) {
+                if ($i -eq $bc) {
+                    $opt = $options[$i]
+                    if ($opt -match 'FRUC')     { $newBackend = 'FRUC_VK' }
+                    elseif ($opt -match 'TRT')   { $newBackend = 'TRT' }
+                    elseif ($opt -match 'NCNN')  { $newBackend = 'NCNN_VK' }
+                    elseif ($opt -match 'MVTools') { $newBackend = 'MVTOOLS' }
+                    # else Cancelar -> $null
+                }
+            }
+
+            if ($newBackend) {
+                $newMode = if ($newBackend -eq 'FRUC_VK') { 'fruc_vulkan' } else { 'vapoursynth' }
+
+                # Verify dependencies for non-FRUC backends
+                if ($newBackend -ne 'FRUC_VK') {
+                    $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
+                    if (-not (Test-Path $vsDir)) {
+                        Write-Bad "VapourSynth no instalado. Ejecuta 'Instalar' con el backend $newBackend primero."
+                        Wait-Continue
+                        return
+                    }
+                }
+
+                # Regenerate auto_mode.lua with new backend
+                $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
+                New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
+                    -Buffered 16 -Concurrent $concurrent `
+                    -BackendMode $newMode -FrucEligible $frucAvailable `
+                    -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
+
+                # Regenerate .vpy only for VapourSynth backends
+                if ($newBackend -ne 'FRUC_VK') {
+                    $rifeBackend = if ($newBackend -eq 'MVTOOLS') { 'MVTOOLS' } else { $newBackend }
+                    New-InterpolationVpy -BackendType $rifeBackend -Profile $profile -Config $config `
+                        -DestDir $config.MpvConfigDir -Force -WizardVersion $Global:WizardVersion `
+                        -VpyTemplateVersion $Global:VpyTemplateVersion
+                }
+
+                $config.ActiveBackend = $newBackend
+                Export-WizardConfig -Config $config -Path $configPath | Out-Null
+                Write-Ok "Backend cambiado a: $newBackend"
+            }
+        }
+        3 {
             $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
             $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
             # Si el archivo no existe (instalaciones previas a v2.1.3 nunca
@@ -281,12 +429,12 @@ function Invoke-Repair {
                 Write-Bad 'No se pudo obtener vsmlrt.py — revisa la conexion y vuelve a Instalar'
             }
         }
-        3 {
+        4 {
             $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
             $modelsToInstall = @($profile.model, 'v4.25')
             Install-RIFEModels -Config $config -VsDir $vsDir -Models $modelsToInstall
         }
-        4 {
+        5 {
             # Setear env vars User-level: hace que mpv.exe directo funcione
             # sin necesidad de mpv-vs.bat. Es lo opuesto del "Limpiar"
             # historico (que solo borraba lo MAL configurado).
@@ -302,7 +450,7 @@ function Invoke-Repair {
                 Write-Host '  - Despues, mpv.exe directo funciona sin mpv-vs.bat' -ForegroundColor Yellow
             }
         }
-        5 {
+        6 {
             # Limpiar env vars persistentes invalidas (paths inexistentes,
             # apuntando a otro install). NO toca las valid del install
             # actual: para esas, usa la opcion 4 (setear).
@@ -322,23 +470,29 @@ function Invoke-Repair {
                 Write-Host '       env vars correctas en lugar de solo borrar las invalidas.' -ForegroundColor Yellow
             }
         }
-        6 {
-            New-InterpolationVpy -BackendType $backendType -Profile $profile -Config $config `
-                -DestDir $config.MpvConfigDir -Force -WizardVersion $Global:WizardVersion `
-                -VpyTemplateVersion $Global:VpyTemplateVersion
+        7 {
+            # Regenerar TODO — respects current backend
+            if ($backendType -ne 'FRUC_VK') {
+                New-InterpolationVpy -BackendType $backendType -Profile $profile -Config $config `
+                    -DestDir $config.MpvConfigDir -Force -WizardVersion $Global:WizardVersion `
+                    -VpyTemplateVersion $Global:VpyTemplateVersion
+            }
             $concurrent = if ($profile.streams -eq 1) { 1 } else { 4 }
             New-AutoModeLua -Config $config -DestDir $config.MpvConfigDir -Force `
                 -Buffered 16 -Concurrent $concurrent `
+                -BackendMode $backendMode -FrucEligible $frucAvailable `
                 -WizardVersion $Global:WizardVersion -LuaTemplateVersion $Global:LuaTemplateVersion
             New-SetDisplayHz -Config $config -DestDir $config.MpvConfigDir -Force `
                 -WizardVersion $Global:WizardVersion -SetHzTemplateVersion $Global:SetHzTemplateVersion
             Install-NisShader -DestDir $config.MpvConfigDir -Force | Out-Null
 
-            $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
-            $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
-            if (Test-Path $vsmlrtPy) { Invoke-VsmlrtPatch -Path $vsmlrtPy }
+            if ($backendType -ne 'FRUC_VK') {
+                $vsDir = Join-Path $config.BaseDir 'vapoursynth-portable'
+                $vsmlrtPy = Join-Path $vsDir 'Lib\site-packages\vsmlrt.py'
+                if (Test-Path $vsmlrtPy) { Invoke-VsmlrtPatch -Path $vsmlrtPy }
+            }
         }
-        7 { return }
+        8 { return }
         default { return }
     }
     Wait-Continue
@@ -518,6 +672,8 @@ while ($true) {
     )
 
     $footer = "Estado: $statusLine | GPU: $gpuLine"
+    $activeBackend = if ($config.ActiveBackend) { $config.ActiveBackend } else { $gpuEnv.SupportedBackend }
+    $footer = "Estado: $statusLine | GPU: $($gpuEnv.GPU) -> $activeBackend"
     if ($updateFooter) { $footer += " | $updateFooter" }
 
     $choice = Show-Menu -Title "MPV Interpolation Wizard v$Global:WizardVersion" -Options $menuItems -Footer $footer

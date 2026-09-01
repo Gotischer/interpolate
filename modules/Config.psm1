@@ -19,6 +19,8 @@ $script:ConfigDefaults = @{
     RifeModel           = ""          # Auto from GPU profile; v4.25_heavy, v4.25, v4.22
     RifeFp16            = $null       # Auto from GPU profile; $true/$false
     RifeStreams          = $null       # Auto from GPU profile; 1 or 2
+    # Active backend — "RIFE_TRT", "FRUC_VK", "MVTOOLS", or "" (auto from GPU)
+    ActiveBackend       = ""
     # Display
     DisplayDevice       = ""          # Empty = auto-detect primary
     # HDR

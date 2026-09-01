@@ -8,19 +8,42 @@
 --   - HDR interpolation support (toggle with Ctrl+h)
 --   - Hot-reload when display changes (60Hz <-> 120Hz)
 --   - Manual toggle with Ctrl+i
---   - OSD status display with Ctrl+Shift+i
+--   - Dual backend: VapourSynth RIFE (AI) / FRUC Vulkan (hardware NVOF)
+--   - Toggle backend with Ctrl+b (when both available)
+--   - OSD status display with Ctrl+Shift+d
 -- =============================================================================
 
 -- ---- Configuration ---------------------------------------------------------
-local INTERP_FILTER = "vapoursynth=~~/interpolation.vpy:buffered-frames={{BUFFERED_FRAMES}}:concurrent-frames={{CONCURRENT_FRAMES}}"
-local SET_HZ_SCRIPT = mp.find_config_file("set_display_hz.ps1")
-local HDR_INTERPOLATION = {{HDR_INTERPOLATION}}    -- true = interpolate HDR; false = Hz switch
+local BACKEND_MODE   = "{{BACKEND_MODE}}"       -- "vapoursynth" | "fruc_vulkan"
+local FRUC_ELIGIBLE  = {{FRUC_ELIGIBLE}}         -- true if GPU supports FRUC Vulkan
+local INTERP_FILTER_VS   = "vapoursynth=~~/interpolation.vpy:buffered-frames={{BUFFERED_FRAMES}}:concurrent-frames={{CONCURRENT_FRAMES}}"
+local INTERP_FILTER_FRUC = "fruc_vulkan"
+local SET_HZ_SCRIPT  = mp.find_config_file("set_display_hz.ps1")
+local HDR_INTERPOLATION = {{HDR_INTERPOLATION}}  -- true = interpolate HDR; false = Hz switch
 
 -- ---- State -----------------------------------------------------------------
 local original_hz = nil
 local hz_changed  = false
 local interp_mode = "auto"   -- "auto", "force_on", "force_off"
 local last_display_fps = nil
+local active_backend = BACKEND_MODE  -- tracks the currently active backend
+
+-- ---- Backend helpers -------------------------------------------------------
+local function get_filter()
+    if active_backend == "fruc_vulkan" then
+        return INTERP_FILTER_FRUC
+    else
+        return INTERP_FILTER_VS
+    end
+end
+
+local function backend_label()
+    if active_backend == "fruc_vulkan" then
+        return "FRUC Vulkan (hardware)"
+    else
+        return "VapourSynth RIFE (AI)"
+    end
+end
 
 -- ---- HDR detection ---------------------------------------------------------
 local function is_hdr()
@@ -57,17 +80,57 @@ end
 local function interp_active()
     local vf = mp.get_property("vf") or ""
     return vf:find("vapoursynth", 1, true) ~= nil
+        or vf:find("fruc_vulkan", 1, true) ~= nil
+end
+
+local function get_active_filter_string()
+    -- Returns the filter string currently in use (for removal)
+    local vf = mp.get_property("vf") or ""
+    if vf:find("fruc_vulkan", 1, true) then
+        return INTERP_FILTER_FRUC
+    elseif vf:find("vapoursynth", 1, true) then
+        return INTERP_FILTER_VS
+    end
+    return nil
 end
 
 local function enable_interp()
     if not interp_active() then
-        mp.commandv("vf", "add", INTERP_FILTER)
+        local filter = get_filter()
+        local ok, err = pcall(function()
+            mp.commandv("vf", "add", filter)
+        end)
+        if not ok then
+            mp.msg.warn("Failed to enable " .. active_backend .. ": " .. tostring(err))
+            -- Fallback: if VapourSynth failed and FRUC is available, try FRUC
+            if active_backend == "vapoursynth" and FRUC_ELIGIBLE then
+                mp.msg.info("Attempting fallback to FRUC Vulkan...")
+                active_backend = "fruc_vulkan"
+                local ok2, err2 = pcall(function()
+                    mp.commandv("vf", "add", INTERP_FILTER_FRUC)
+                end)
+                if ok2 then
+                    mp.osd_message("RIFE falló → Fallback: FRUC Vulkan (hardware)", 4)
+                    return true
+                else
+                    mp.msg.error("FRUC Vulkan fallback also failed: " .. tostring(err2))
+                    active_backend = "vapoursynth"  -- restore original
+                    return false
+                end
+            end
+            return false
+        end
+        return true
     end
+    return true
 end
 
 local function disable_interp()
-    if interp_active() then
-        mp.commandv("vf", "remove", INTERP_FILTER)
+    local current = get_active_filter_string()
+    if current then
+        pcall(function()
+            mp.commandv("vf", "remove", current)
+        end)
     end
 end
 
@@ -102,7 +165,7 @@ local function apply_mode()
             set_hz(math.floor(original_hz))
             hz_changed = false
         end
-        mp.osd_message("Interpolación: ON (forzado)", 2)
+        mp.osd_message("Interpolación: ON (forzado) | " .. backend_label(), 2)
         return
     end
 
@@ -131,8 +194,9 @@ local function apply_mode()
         local display = mp.get_property_number("display-fps") or 60
         local multi = math.max(2, math.ceil(display / fps))
         mp.osd_message(string.format(
-            "%s %dfps → %dfps (×%d) | Display: %dHz",
-            mode_label, math.floor(fps + 0.5), math.floor(fps * multi + 0.5), multi, math.floor(display + 0.5)
+            "%s %dfps → %dfps (×%d) | %s | Display: %dHz",
+            mode_label, math.floor(fps + 0.5), math.floor(fps * multi + 0.5), multi,
+            backend_label(), math.floor(display + 0.5)
         ), 3)
     end
 end
@@ -140,6 +204,7 @@ end
 -- ---- Events ----------------------------------------------------------------
 mp.register_event("file-loaded", function()
     interp_mode = "auto"
+    active_backend = BACKEND_MODE  -- reset to configured default on new file
     apply_mode()
 end)
 
@@ -197,6 +262,30 @@ mp.add_key_binding("Ctrl+h", "toggle-hdr-interp", function()
     apply_mode()
 end)
 
+-- Ctrl+b: Toggle backend (VapourSynth RIFE <-> FRUC Vulkan)
+mp.add_key_binding("Ctrl+b", "toggle-backend", function()
+    if not FRUC_ELIGIBLE then
+        mp.osd_message("FRUC Vulkan no disponible (requiere RTX 30+)", 3)
+        return
+    end
+    -- Remove current filter
+    disable_interp()
+    -- Switch backend
+    if active_backend == "vapoursynth" then
+        active_backend = "fruc_vulkan"
+    else
+        active_backend = "vapoursynth"
+    end
+    -- Re-apply
+    mp.add_timeout(0.3, function()
+        if interp_mode ~= "force_off" then
+            apply_mode()
+        else
+            mp.osd_message("Backend: " .. backend_label() .. " (interp OFF)", 3)
+        end
+    end)
+end)
+
 -- Ctrl+Shift+d: Show diagnostic info
 mp.add_key_binding("Ctrl+Shift+d", "show-interp-info", function()
     local fps     = mp.get_property_number("container-fps") or 0
@@ -208,10 +297,13 @@ mp.add_key_binding("Ctrl+Shift+d", "show-interp-info", function()
     local h       = mp.get_property_number("height") or 0
 
     mp.osd_message(string.format(
-        "[RIFE] %s %dx%d | %dfps → %dfps (×%d)\nDisplay: %.0fHz | Interp: %s | Mode: %s\nHDR interp: %s | Ctrl+i=toggle Ctrl+h=HDR",
+        "[%s] %s %dx%d | %dfps → %dfps (×%d)\nDisplay: %.0fHz | Interp: %s | Mode: %s\nBackend: %s | FRUC: %s\nHDR interp: %s | Ctrl+i=toggle Ctrl+b=backend Ctrl+h=HDR",
+        active_backend == "fruc_vulkan" and "FRUC" or "RIFE",
         hdr, w, h,
         math.floor(fps + 0.5), math.floor(fps * multi + 0.5), multi,
         display, active, interp_mode,
+        backend_label(),
+        FRUC_ELIGIBLE and "disponible" or "no disponible",
         HDR_INTERPOLATION and "ON" or "OFF"
     ), 5)
 end)

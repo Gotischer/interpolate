@@ -3,6 +3,7 @@
 Asistente automatizado para instalar interpolación de frames en [mpv](https://mpv.io) usando VapourSynth + RIFE (TensorRT/NCNN) o MVTools como respaldo. Convierte videos de 24/30 fps en reproducción fluida a 60/120/144 Hz.
 
 ## Changelog
+- **v2.2.0**: Soporte para **FFmpeg FRUC Vulkan** (`vf_fruc_vulkan`) como backend nativo sin dependencias para GPUs NVIDIA RTX 30/40/50 (Ampere+). Permite instalación instantánea (< 5 segundos) sin VapourSynth/Python/TensorRT, selector de modo en el wizard, toggle de backend en tiempo real con `Ctrl+b`, fallback automático si VapourSynth falla y diagnóstico dedicado.
 - **v2.1.21**: Se parchea `vsmlrt.py` para solucionar un crash en TensorRT (`API Usage Error: Dimension mismatch`) cuando se usan modelos regulares de 7 canales (ej. `v4.25_heavy`) en lugar de los modelos ensemble de 11 canales introducidos en `vs-mlrt` v31.
 - **v2.1.20**: Se agregó `ensemble_v1` a la instalación de modelos requeridos de RIFE y se solucionó límite de paginación de la API de GitHub al buscar releases.
 - **v2.1.16**: Validación añadida a GitHub API para ignorar releases de dependencias sin binarios compilados (corrige error 404 con VapourSynth R77).
@@ -19,37 +20,38 @@ Doble clic y listo. No requiere instalación previa.
 ## Características
 
 | Característica | Descripción |
-|----------------|-------------|
-| 🎮 **Backend automático según GPU** | Detecta hardware y elige el backend viable (TRT-RTX / TRT / NCNN+Vulkan / OpenVINO / MVTools) |
-| 🔄 **RIFE TensorRT-RTX** | Variante con kernels sm_120 para RTX 50xx (Blackwell) — engine compila en ~1 s vs minutos del TRT genérico. *NVIDIA only* |
-| 🔄 **RIFE TensorRT** | RTX 20xx/30xx/40xx — engine pre-compilado, latencia baja, throughput alto. *NVIDIA only* |
-| 🌐 **RIFE NCNN/Vulkan** | Intento para AMD/Intel modernas — usa Vulkan, sin dependencias propietarias. *Cobertura incompleta: ver tabla abajo* |
-| 🐢 **MVTools (CPU)** | Pascal y anteriores, AMD/Intel cuando RIFE no es viable — motion vectors clásicos (no neural), paraleliza en todos los hilos del CPU. *No es RIFE, es la técnica que usa SVP* |
-| 🎬 **Scene Detection sin plugins** | Polyfill con `PlaneStats` (en core de VapourSynth) — RIFE corta limpio en cambios de escena, sin morphing |
-| 🔍 **Cap 1080p + NIS upscale** | RIFE procesa máximo a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling (mismo que usa SVP). **NIS ≠ DLSS** — es un shader espacial público que corre en cualquier GPU |
+|---|---|
+| ⚡ **FRUC Vulkan Nativo (NVIDIA)** | RTX 30xx/40xx/50xx — Hardware Optical Flow (`VK_NV_optical_flow`) nativo en FFmpeg. **Zero-dependencies**: sin VapourSynth, sin Python, sin TensorRT, instalación en 5 segundos |
+| 🎮 **Backend automático según GPU** | Detecta hardware y ofrece los backends viables (FRUC Vulkan / TRT / NCNN+Vulkan / MVTools) |
+| 🔄 **RIFE TensorRT** | RTX 20xx/30xx/40xx/50xx — Inferencia neural con TensorRT, máxima calidad de imagen |
+| 🌐 **RIFE NCNN/Vulkan** | Intento para AMD/Intel modernas — usa Vulkan, sin dependencias propietarias |
+| 🐢 **MVTools (CPU)** | Pascal y anteriores, AMD/Intel cuando RIFE no es viable — motion vectors clásicos (no neural) |
+| 🔀 **Toggle de backend (`Ctrl+b`)** | Alterna entre RIFE (AI) y FRUC (Hardware) en tiempo real con fallback automático |
+| 🎬 **Scene Detection sin plugins** | Polyfill con `PlaneStats` (en core de VapourSynth) — RIFE corta limpio en cambios de escena |
+| 🔍 **Cap 1080p + NIS upscale** | Procesa a 1080p; mpv hace upscale al display real con el shader NVIDIA Image Scaling |
 | 📺 **Multi-monitor** | Detecta cambios de refresh rate y re-aplica el filtro al mover la ventana entre monitores 60/120/144 Hz |
 | 🌈 **HDR completo** | Interpolación preservando BT.2020/PQ/HLG y metadata MaxCLL/MaxFALL; toggle por sesión con `Ctrl+h` |
-| 🛡️ **Robustez de clips raros** | Guard contra fps inválida (videos de WhatsApp/captura/VFR) — el filtro normaliza antes de pasar a RIFE/MVTools |
-| 🧰 **Crash logger en el `.vpy`** | Si VapourSynth falla, escribe `interpolation.error.log` con traceback Python completo (mpv solo muestra un genérico "Could not initialize") |
-| 🌐 **Env vars User-level** | Instala variables persistentes así `mpv.exe` directo funciona — no obliga a usar `mpv-vs.bat` |
+| 🛡️ **Robustez de clips raros** | Guard contra fps inválida (videos de WhatsApp/captura/VFR) |
+| 🧰 **Crash logger en el `.vpy`** | Si VapourSynth falla, escribe `interpolation.error.log` con traceback Python completo |
+| 🌐 **Env vars User-level** | Instala variables persistentes para que `mpv.exe` directo funcione sin `mpv-vs.bat` |
 | 🔧 **Auto-update** | Notificaciones de nuevas versiones desde GitHub |
 
 ### Soporte de GPU
 
-> **Nota sobre RIFE y NVIDIA**: RIFE (Real-Time Intermediate Flow Estimation) es un **modelo neural open source**, no una tecnología propietaria de NVIDIA. Se distribuye como `.onnx` y puede ejecutarse en cualquier hardware compatible. Lo que sí es exclusivo de NVIDIA es **TensorRT** (el runtime de inferencia más rápido). Para AMD e Intel, RIFE puede correr con NCNN/Vulkan, OpenVINO o DirectML. Sin embargo, no todos los runtimes implementan todas las operaciones del modelo en todas las versiones — la cobertura real depende del backend específico y de la generación de GPU.
+> **Nota sobre RIFE y NVIDIA**: RIFE (Real-Time Intermediate Flow Estimation) es un **modelo neural open source**, no una tecnología propietaria de NVIDIA. Se distribuye como `.onnx` y puede ejecutarse en cualquier hardware compatible. Lo que sí es exclusivo de NVIDIA es **TensorRT** (el runtime de inferencia más rápido) y **FRUC Vulkan** (`VK_NV_optical_flow`, hardware Optical Flow Accelerator en Ampere+).
 
-| GPU | Backend | Modelo | Calidad | Estado real |
-|-----|---------|--------|---------|-------------|
-| RTX 5090/5080/5070 (Blackwell) | TensorRT | v4.25 | 🏆 Máxima | ✅ Probado |
-| RTX 4090-4060 (Ada) | TensorRT | v4.25 | 🏆 Máxima | ✅ Funcional por arquitectura |
-| RTX 3090-3050 (Ampere) | TensorRT | v4.25 | 🏆 Máxima | ✅ Funcional por arquitectura |
-| RTX 2080-2060 (Turing) | TensorRT | v4.25 | ⚡ Balanceado | ✅ Funcional por arquitectura |
-| **GTX 1080-1050 (Pascal)** | **MVTools (CPU)** | — | 🐢 Compatible | ✅ Probado |
-| **GTX 9xx y anteriores** | **MVTools (CPU)** | — | 🐢 Compatible | ⚠ No probado, fallback por defecto |
-| AMD RX 7xxx (RDNA3) | NCNN/Vulkan (intento) → MVTools | v4.25 | ⚡ Balanceado | ⚠ No probado en AMD real |
-| AMD RX 6xxx (RDNA2) | NCNN/Vulkan (intento) → MVTools | v4.22 | 💨 Rendimiento | ⚠ No probado en AMD real |
-| Intel Arc | NCNN/Vulkan (intento) → MVTools | v4.22 | ⚡ Balanceado | ⚠ No probado en Intel Arc real |
-| iGPU / sin GPU dedicada | MVTools (CPU) | — | 🐢 Básica | ✅ Probado |
+| GPU | Backend Nativo | Backend AI (VapourSynth) | Calidad | Espacio | Estado real |
+|---|---|---|---|---|---|
+| RTX 5090/5080/5070 (Blackwell) | **FRUC Vulkan** | RIFE TensorRT (v4.25) | ⚡ Eficiente / 🏆 Máxima | ~0 MB / ~7 GB | ✅ Probado |
+| RTX 4090-4060 (Ada) | **FRUC Vulkan** | RIFE TensorRT (v4.25) | ⚡ Eficiente / 🏆 Máxima | ~0 MB / ~7 GB | ✅ Funcional |
+| RTX 3090-3050 (Ampere) | **FRUC Vulkan** | RIFE TensorRT (v4.25) | ⚡ Eficiente / 🏆 Máxima | ~0 MB / ~7 GB | ✅ Funcional |
+| RTX 2080-2060 (Turing) | — | RIFE TensorRT (v4.25) | ⚡ Balanceado | ~7 GB | ✅ Funcional |
+| **GTX 1080-1050 (Pascal)** | — | **MVTools (CPU)** | 🐢 Compatible | ~600 MB | ✅ Probado |
+| **GTX 9xx y anteriores** | — | **MVTools (CPU)** | 🐢 Compatible | ~600 MB | ⚠ Fallback |
+| AMD RX 7xxx (RDNA3) | — | NCNN/Vulkan → MVTools | ⚡ Balanceado | ~2 GB | ⚠ No probado |
+| AMD RX 6xxx (RDNA2) | — | NCNN/Vulkan → MVTools | 💨 Rendimiento | ~2 GB | ⚠ No probado |
+| Intel Arc | — | NCNN/Vulkan → MVTools | ⚡ Balanceado | ~2 GB | ⚠ No probado |
+| iGPU / sin GPU dedicada | — | MVTools (CPU) | 🐢 Básica | ~600 MB | ✅ Probado |
 
 **Por qué Pascal y NVIDIA antiguas van a MVTools por defecto:**
 
@@ -124,11 +126,21 @@ d3d11-adapter=NVIDIA
 ### Atajos en mpv
 
 | Atajo | Acción |
-|-------|--------|
+|---|---|
 | `Ctrl+i` | Toggle interpolación ON/OFF |
+| `Ctrl+b` | Cambiar backend en tiempo real (RIFE AI ↔ FRUC Vulkan) |
 | `Ctrl+h` | Toggle interpolación HDR ON/OFF |
 | `Ctrl+Shift+i` | Forzar interpolación ON |
-| `Ctrl+Shift+d` | Mostrar diagnóstico OSD |
+| `Ctrl+Shift+d` | Mostrar diagnóstico OSD completo |
+
+## Comparativa de Backends
+
+| Backend | Método | Calidad | Dependencias | VRAM | Latencia / Overhead | Hardware requerido |
+|---|---|---|---|---|---|---|
+| **FRUC Vulkan** | Hardware Optical Flow (`VK_NV_optical_flow`) | ⚡ Alta / Eficiente | **0 MB** (Nativo en FFmpeg) | ~100 MB | Ultrabaja (hardware dedicado) | NVIDIA RTX 30/40/50 |
+| **RIFE TensorRT** | Red Neuronal AI (`vs-mlrt`) | 🏆 Máxima (sin halos) | ~7 GB (VapourSynth, CUDA, TRT, ONNX) | ~1-2 GB | Media (Tensor Cores) | NVIDIA RTX 20/30/40/50 |
+| **RIFE NCNN/Vulkan** | Red Neuronal AI (NCNN) | ⚡ Balanceado | ~2 GB (VapourSynth, Vulkan) | ~1 GB | Media-Alta | AMD RX 6000+, Intel Arc |
+| **MVTools** | Motion Vectors clásicos (CPU) | 🐢 Básica | ~600 MB (VapourSynth, plugin C++) | ~0 MB | CPU bound (hilos multi-core) | Universal (Pascal, iGPU, CPU) |
 
 ## HDR
 
@@ -145,6 +157,13 @@ Cobertura por formato HDR:
 | HLG | ✓ Interpolación + transfer HLG |
 
 ## Cómo se interpola (pipeline real)
+
+**Path FRUC Vulkan (RTX 30xx+, Nativo sin dependencias):**
+```
+Source ──┐
+         ├─→ mpv vf=fruc_vulkan (NVIDIA Optical Flow Accelerator por hardware)
+         └─→ mpv VO + NVScaler.glsl ──→ Display nativo
+```
 
 **Path RIFE (RTX 20xx+, AMD modernas, Intel Arc):**
 ```
@@ -198,7 +217,7 @@ El shader `NVScaler.glsl` que el wizard copia a `portable_config/shaders/` es **
 
 ## Multi-Monitor
 
-`auto_mode.lua` escucha `display-fps`. Si movés la ventana entre un monitor 60 Hz y un TV 120 Hz, detecta el cambio, remueve el filtro VapourSynth y lo vuelve a agregar — RIFE recalcula `multi` para el nuevo refresh rate.
+`auto_mode.lua` escucha `display-fps`. Si movés la ventana entre un monitor 60 Hz y un TV 120 Hz, detecta el cambio, remueve el filtro y lo vuelve a agregar recalculando para el nuevo refresh rate.
 
 ## Estructura del repositorio
 
@@ -207,6 +226,7 @@ mpv-interp-wizard.ps1          # Entry point principal
 modules/                       # Módulos PowerShell
   Config.psm1                  # Configuración JSON
   GPU.psm1                     # Detección de GPU
+  FFmpegDetect.psm1            # Detección de fruc_vulkan / FFmpeg
   Download.psm1                # Descargas (aria2)
   VapourSynth.psm1             # Instalación VS
   VsMlrt.psm1                  # Bundle vs-mlrt
@@ -218,7 +238,7 @@ modules/                       # Módulos PowerShell
 templates/                     # Templates editables
   interpolation-rife.vpy       # Template RIFE (incluye SC detection)
   interpolation-mvtools.vpy    # Template MVTools
-  auto_mode.lua                # Control automático
+  auto_mode.lua                # Control automático (dual backend)
   set_display_hz.ps1           # Cambio de Hz
   shaders/
     NVScaler.glsl              # NVIDIA Image Scaling v1.0.2 (NIS)

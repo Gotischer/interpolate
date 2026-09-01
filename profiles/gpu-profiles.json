@@ -9,7 +9,20 @@
             "fp16": true,
             "streams": 2,
             "workspace": null,
+            "fruc_eligible": true,
             "notes": "RTX 5080/5090 — TRT-RTX 1.4 tiene peor jitter en este driver (peaks 3x mas altos pese a mismo avg). Volver a TRT_RTX cuando salga 1.5+."
+        },
+        "Blackwell_FRUC": {
+            "label": "⚡ Nativa (RTX 50xx — FRUC Vulkan)",
+            "gpu_gen": "Blackwell",
+            "compute_cap": "12.0",
+            "backend": "FRUC_VK",
+            "model": null,
+            "fp16": null,
+            "streams": null,
+            "workspace": null,
+            "fruc_eligible": true,
+            "notes": "RTX 5080/5090 — FRUC Vulkan (hardware optical flow NVOF). Zero dependencies, instant install."
         },
         "Ada": {
             "label": "🏆 Máxima Calidad (RTX 40xx)",
@@ -20,7 +33,20 @@
             "fp16": true,
             "streams": 2,
             "workspace": null,
+            "fruc_eligible": true,
             "notes": "RTX 4060-4090 — v4.25 mantiene 4K@60. _heavy queda como upgrade para 1080p."
+        },
+        "Ada_FRUC": {
+            "label": "⚡ Nativa (RTX 40xx — FRUC Vulkan)",
+            "gpu_gen": "Ada Lovelace",
+            "compute_cap": "8.9",
+            "backend": "FRUC_VK",
+            "model": null,
+            "fp16": null,
+            "streams": null,
+            "workspace": null,
+            "fruc_eligible": true,
+            "notes": "RTX 4060-4090 — FRUC Vulkan (hardware optical flow NVOF). Zero dependencies, instant install."
         },
         "Ampere": {
             "label": "🏆 Máxima Calidad (RTX 30xx)",
@@ -31,7 +57,20 @@
             "fp16": true,
             "streams": 2,
             "workspace": null,
+            "fruc_eligible": true,
             "notes": "RTX 3050-3090 — v4.25 estable a 4K. Heavy solo recomendado en 3090/Ti a <=1440p."
+        },
+        "Ampere_FRUC": {
+            "label": "⚡ Nativa (RTX 30xx — FRUC Vulkan)",
+            "gpu_gen": "Ampere",
+            "compute_cap": "8.6",
+            "backend": "FRUC_VK",
+            "model": null,
+            "fp16": null,
+            "streams": null,
+            "workspace": null,
+            "fruc_eligible": true,
+            "notes": "RTX 3050-3090 — FRUC Vulkan (hardware optical flow NVOF). Zero dependencies, instant install."
         },
         "Turing": {
             "label": "⚡ Balanceado (RTX 20xx / GTX 16xx)",
@@ -42,7 +81,8 @@
             "fp16": true,
             "streams": 1,
             "workspace": null,
-            "notes": "RTX 2060-2080 / GTX 1650-1660 — Good quality, single stream for stability"
+            "fruc_eligible": false,
+            "notes": "RTX 2060-2080 / GTX 1650-1660 — Good quality, single stream for stability. FRUC Vulkan no soportado (SDK 5.0 requiere Ampere+)."
         },
         "Pascal": {
             "label": "🐢 Compatible (GTX 10xx)",
@@ -54,6 +94,7 @@
             "fp16": false,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "GTX 1050-1080 — MVTools (CPU). RIFE neural no es viable en Pascal."
         },
         "NVIDIA_Old": {
@@ -65,6 +106,7 @@
             "fp16": false,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "GTX 9xx y mas viejas — MVTools (TRT no soporta sm_<7.5)."
         },
         "AMD_RDNA3": {
@@ -76,6 +118,7 @@
             "fp16": true,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "RX 7600-7900 — Vulkan/NCNN, good performance"
         },
         "AMD_RDNA2": {
@@ -87,6 +130,7 @@
             "fp16": true,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "RX 6500-6900 — Vulkan/NCNN"
         },
         "AMD_Old": {
@@ -98,6 +142,7 @@
             "fp16": false,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "RX 5xx / Vega / RX 5xxx — Vulkan/NCNN, limited"
         },
         "Intel_Arc": {
@@ -109,6 +154,7 @@
             "fp16": true,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "Intel Arc A-series — Vulkan/NCNN"
         },
         "iGPU_Xe": {
@@ -120,6 +166,7 @@
             "fp16": true,
             "streams": 1,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "Intel Iris Xe — Vulkan/NCNN, may be slow"
         },
         "Fallback": {
@@ -131,6 +178,7 @@
             "fp16": null,
             "streams": null,
             "workspace": null,
+            "fruc_eligible": false,
             "notes": "No dedicated GPU or unsupported GPU — CPU-only motion interpolation"
         }
     },

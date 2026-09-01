@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  build-single-bat.ps1 — Empaqueta el wizard en un .bat auto-extraible
 #
 #  Estrategia: Comprime todo en un .zip, lo codifica en Base64, lo divide
@@ -23,6 +23,7 @@ $filesToEmbed = @(
     "modules\UI.psm1",
     "modules\Config.psm1",
     "modules\GPU.psm1",
+    "modules\FFmpegDetect.psm1",
     "modules\Download.psm1",
     "modules\VapourSynth.psm1",
     "modules\VsMlrt.psm1",

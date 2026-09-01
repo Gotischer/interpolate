@@ -8,3 +8,5 @@ MPV-Interp-Wizard.bat
 SHA256.txt
 7zr.exe
 bin/
+*.7z
+*.zip

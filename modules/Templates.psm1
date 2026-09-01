@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  Templates.psm1 — Generate configuration files from templates
 #
 #  Reads template files with {{PLACEHOLDER}} markers and substitutes values
@@ -127,6 +127,12 @@ function New-InterpolationVpy {
 
     Write-Host "`n===> Generando interpolation.vpy" -ForegroundColor Cyan
 
+    # FRUC Vulkan: no .vpy needed — interpolation runs natively in FFmpeg/mpv
+    if ($BackendType -eq "FRUC_VK") {
+        Write-Host "     FRUC Vulkan: no se necesita interpolation.vpy (interpolacion nativa en mpv)" -ForegroundColor Gray
+        return $null
+    }
+
     $dst    = Join-Path $DestDir "interpolation.vpy"
     $parent = Split-Path $dst -Parent
     if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
@@ -199,6 +205,10 @@ function New-AutoModeLua {
     <#
     .SYNOPSIS
         Generates auto_mode.lua from the template.
+    .PARAMETER BackendMode
+        "vapoursynth" or "fruc_vulkan" — determines which filter the Lua script uses.
+    .PARAMETER FrucEligible
+        If $true, the Lua script enables Ctrl+b toggle and auto-fallback to FRUC.
     #>
     param(
         [hashtable]$Config,
@@ -206,6 +216,8 @@ function New-AutoModeLua {
         [switch]$Force,
         [int]$Buffered = 8,
         [int]$Concurrent = 4,
+        [string]$BackendMode = "vapoursynth",
+        [bool]$FrucEligible = $false,
         [string]$WizardVersion = "2.0.0",
         [int]$LuaTemplateVersion = 1
     )
@@ -232,12 +244,15 @@ function New-AutoModeLua {
     $content = Get-Content $tplFile -Raw -Encoding UTF8
 
     $hdrInterp = if ($null -ne $Config.HdrInterpolation -and $Config.HdrInterpolation) { "true" } else { "false" }
+    $frucStr   = if ($FrucEligible) { "true" } else { "false" }
 
     $content = $content -replace '{{LUA_TEMPLATE_VERSION}}', $LuaTemplateVersion
     $content = $content -replace '{{WIZARD_VERSION}}', $WizardVersion
     $content = $content -replace '{{BUFFERED_FRAMES}}', $Buffered
     $content = $content -replace '{{CONCURRENT_FRAMES}}', $Concurrent
     $content = $content -replace '{{HDR_INTERPOLATION}}', $hdrInterp
+    $content = $content -replace '{{BACKEND_MODE}}', $BackendMode
+    $content = $content -replace '{{FRUC_ELIGIBLE}}', $frucStr
 
     Write-Utf8NoBom -Path $dst -Content $content
     Write-Host "[OK] auto_mode.lua creado" -ForegroundColor Green

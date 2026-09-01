@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  Diagnostics.psm1 - Deep diagnostic checks for the interpolation pipeline
 # =============================================================================
 
@@ -16,7 +16,7 @@ function Invoke-Diagnostics {
     Write-Host ""
 
     # 1) mpv.exe
-    Write-Host "  [1/7] mpv.exe" -ForegroundColor Cyan
+    Write-Host "  [1/8] mpv.exe" -ForegroundColor Cyan
     if ($Config.MpvExe -and (Test-Path $Config.MpvExe)) {
         $hasVs = Test-MpvVapourSynth -MpvExe $Config.MpvExe
         $results['mpv.exe'] = @{ Status = 'OK'; Path = $Config.MpvExe; VapourSynth = $hasVs }
@@ -34,14 +34,14 @@ function Invoke-Diagnostics {
     }
 
     # 2) GPU
-    Write-Host "  [2/7] GPU" -ForegroundColor Cyan
+    Write-Host "  [2/8] GPU" -ForegroundColor Cyan
     $results['GPU'] = $GPUEnv
     Write-Host ('     GPU: ' + $GPUEnv.GPU) -ForegroundColor Gray
     Write-Host ('     Backend: ' + $GPUEnv.SupportedBackend) -ForegroundColor Gray
     Write-Host ('     Perfil: ' + $GPUEnv.ProfileKey) -ForegroundColor Gray
 
     # 3) VapourSynth
-    Write-Host "  [3/7] VapourSynth" -ForegroundColor Cyan
+    Write-Host "  [3/8] VapourSynth" -ForegroundColor Cyan
     $vsStatus = Test-VapourSynthInstall -BaseDir $Config.BaseDir
     $results['VapourSynth'] = $vsStatus
     if ($vsStatus.Installed) {
@@ -52,7 +52,7 @@ function Invoke-Diagnostics {
     }
 
     # 4) vs-mlrt
-    Write-Host "  [4/7] vs-mlrt" -ForegroundColor Cyan
+    Write-Host "  [4/8] vs-mlrt" -ForegroundColor Cyan
     if ($vsStatus.Installed) {
         $mlrtStatus = Test-VsMlrtInstall -VsDir $vsStatus.Path
         $results['vs-mlrt'] = $mlrtStatus
@@ -68,7 +68,7 @@ function Invoke-Diagnostics {
         }
 
         # 5) vsmlrt.py patches
-        Write-Host "  [5/7] Parches vsmlrt.py" -ForegroundColor Cyan
+        Write-Host "  [5/8] Parches vsmlrt.py" -ForegroundColor Cyan
         if ($mlrtStatus.VsmlrtPy) {
             if ($mlrtStatus.VsmlrtPatched) {
                 Write-Host '     OK: Parcheado correctamente' -ForegroundColor Green
@@ -82,7 +82,7 @@ function Invoke-Diagnostics {
         }
 
         # 6) Models
-        Write-Host "  [6/7] Modelos RIFE" -ForegroundColor Cyan
+        Write-Host "  [6/8] Modelos RIFE" -ForegroundColor Cyan
         if ($mlrtStatus.ModelCount -gt 0) {
             Write-Host ('     OK: ' + $mlrtStatus.ModelCount + ' modelos ONNX') -ForegroundColor Green
         } else {
@@ -90,9 +90,9 @@ function Invoke-Diagnostics {
             $issues += 'No hay modelos RIFE instalados.'
         }
     } else {
-        Write-Host '  [4/7] vs-mlrt - (requiere VapourSynth)' -ForegroundColor DarkGray
-        Write-Host '  [5/7] Parches - (requiere VapourSynth)' -ForegroundColor DarkGray
-        Write-Host '  [6/7] Modelos - (requiere VapourSynth)' -ForegroundColor DarkGray
+        Write-Host '  [4/8] vs-mlrt - (requiere VapourSynth)' -ForegroundColor DarkGray
+        Write-Host '  [5/8] Parches - (requiere VapourSynth)' -ForegroundColor DarkGray
+        Write-Host '  [6/8] Modelos - (requiere VapourSynth)' -ForegroundColor DarkGray
     }
 
     # 6b) Persistent env vars left by older install scripts
@@ -114,8 +114,32 @@ function Invoke-Diagnostics {
         $issues += 'Variables de entorno persistentes mal configuradas. Ejecuta Reparar para limpiarlas.'
     }
 
-    # 7) mpv config files
-    Write-Host '  [7/7] Archivos de config' -ForegroundColor Cyan
+    # 7) FRUC Vulkan availability
+    Write-Host '  [7/8] FRUC Vulkan' -ForegroundColor Cyan
+    $activeBackend = if ($Config.ActiveBackend) { $Config.ActiveBackend } else { 'auto' }
+    Write-Host ('     Backend activo: ' + $activeBackend) -ForegroundColor Gray
+    if ($GPUEnv.FrucEligible) {
+        $frucOk = Test-FrucVulkanAvailable -MpvExe $Config.MpvExe
+        $results['FRUC'] = @{ Eligible = $true; Available = $frucOk }
+        if ($frucOk) {
+            Write-Host '     OK: fruc_vulkan disponible en este build de mpv' -ForegroundColor Green
+        } else {
+            Write-Host '     INFO: fruc_vulkan no disponible (build de mpv no lo incluye aun)' -ForegroundColor Yellow
+            if ($activeBackend -eq 'FRUC_VK') {
+                $issues += 'FRUC Vulkan configurado como backend pero no disponible en este build de mpv.'
+            }
+        }
+        $ffmpegVer = Get-MpvFFmpegVersion -MpvExe $Config.MpvExe
+        if ($ffmpegVer) {
+            Write-Host ('     FFmpeg: ' + $ffmpegVer) -ForegroundColor DarkGray
+        }
+    } else {
+        $results['FRUC'] = @{ Eligible = $false; Available = $false }
+        Write-Host '     N/A: GPU no soporta FRUC Vulkan (requiere RTX 30+)' -ForegroundColor DarkGray
+    }
+
+    # 8) mpv config files
+    Write-Host '  [8/8] Archivos de config' -ForegroundColor Cyan
     $vpyPath = Join-Path $Config.MpvConfigDir 'interpolation.vpy'
     $luaPath = Join-Path $Config.MpvConfigDir 'scripts\auto_mode.lua'
     $hzPath  = Join-Path $Config.MpvConfigDir 'set_display_hz.ps1'
@@ -136,8 +160,13 @@ function Invoke-Diagnostics {
                 }
             } catch {}
         } else {
-            Write-Host ('     WARN: ' + $file.Name + ' no encontrado') -ForegroundColor Yellow
-            $issues += ($file.Name + ' no existe en ' + $Config.MpvConfigDir)
+            # interpolation.vpy is not needed for FRUC-only installs
+            if ($file.Name -eq 'interpolation.vpy' -and $activeBackend -eq 'FRUC_VK') {
+                Write-Host ('     OK: ' + $file.Name + ' (no necesario — backend FRUC)') -ForegroundColor DarkGray
+            } else {
+                Write-Host ('     WARN: ' + $file.Name + ' no encontrado') -ForegroundColor Yellow
+                $issues += ($file.Name + ' no existe en ' + $Config.MpvConfigDir)
+            }
         }
     }
 
