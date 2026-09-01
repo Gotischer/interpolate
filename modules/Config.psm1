@@ -110,8 +110,11 @@ function Get-CachedRelease {
     try {
         $cache = Get-Content $CachePath -Raw | ConvertFrom-Json
         $entry = $cache.$cacheKey
+        # Validate entry: must be within 24h, have Assets, and Tag must be a single non-empty string without whitespace
         if ($entry -and $entry.Timestamp -gt (Get-Date).AddHours(-24).Ticks -and $entry.Assets) {
-            return $entry
+            if ($entry.Tag -and ($entry.Tag -is [string]) -and ($entry.Tag.Trim() -notmatch '\s')) {
+                return $entry
+            }
         }
     } catch {}
     return $null
@@ -146,23 +149,32 @@ function Get-LatestGithubRelease {
 
     try {
         $headers = @{ "Accept" = "application/vnd.github.v3+json"; "User-Agent" = "mpv-interp-wizard" }
-        
+        $json = $null
+
         if ($RequireAssetMatch) {
             $apiUrl = "https://api.github.com/repos/$Repo/releases?per_page=100"
-            $jsonList = @(Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15)
-            $json = $jsonList | Where-Object {
-                $assets = @($_.assets)
-                $assets | Where-Object { $_.name -like $RequireAssetMatch }
-            } | Select-Object -First 1
+            $rawList = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15
+            if ($rawList) {
+                foreach ($rel in $rawList) {
+                    $matchedAssets = @($rel.assets) | Where-Object { $_.name -like $RequireAssetMatch }
+                    if ($matchedAssets -and $matchedAssets.Count -gt 0) {
+                        $json = $rel
+                        break
+                    }
+                }
+            }
         } else {
-            $apiUrl  = "https://api.github.com/repos/$Repo/releases/latest"
-            $json    = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15
+            $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
+            $json   = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15
         }
 
-        if ($json) {
+        if ($json -and $json.tag_name) {
+            $tagName = if ($json.tag_name -is [array]) { [string]$json.tag_name[0] } else { [string]$json.tag_name }
+            $htmlUrl = if ($json.html_url -is [array]) { [string]$json.html_url[0] } else { [string]$json.html_url }
+
             $release = [PSCustomObject]@{
-                Tag       = $json.tag_name
-                Url       = $json.html_url
+                Tag       = $tagName.Trim()
+                Url       = $htmlUrl.Trim()
                 Timestamp = (Get-Date).Ticks
                 Assets    = @($json.assets | ForEach-Object {
                     [PSCustomObject]@{ Name = $_.name; Url = $_.browser_download_url; Size = $_.size }
