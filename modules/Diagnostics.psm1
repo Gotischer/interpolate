@@ -105,7 +105,7 @@ function Invoke-Diagnostics {
     Write-Host '  [extra] Variables de entorno persistentes' -ForegroundColor Cyan
     $envIssues = Get-StaleVsEnvVars
     if ($envIssues.Count -eq 0) {
-        Write-Host '     OK: VSSCRIPT_PATH / PYTHONPATH limpios' -ForegroundColor Green
+        Write-Host '     OK: Variables de entorno limpias (sin PYTHONHOME/PYTHONPATH globales)' -ForegroundColor Green
     } else {
         foreach ($e in $envIssues) {
             Write-Host ('     WARN: ' + $e.Name + ' (' + $e.Scope + ') = ' + $e.Value) -ForegroundColor Yellow
@@ -192,13 +192,13 @@ function Invoke-Diagnostics {
 function Get-StaleVsEnvVars {
     <#
     .SYNOPSIS
-        Returns a list of persistent env vars (User/Machine scope) that point
-        to INVALID paths (the case where install_interp-2.ps1 set them to a
-        non-existent or wrong location).
+        Returns a list of persistent env vars (User/Machine scope) that are
+        misconfigured or no longer needed.
 
-        Valid persistent env vars (pointing to real files in the current VS
-        portable) are NOT flagged: the canonical setup uses them so mpv.exe
-        directo works without needing mpv-vs.bat each time.
+        PYTHONHOME y PYTHONPATH a nivel User/Machine siempre se reportan como
+        problema si apuntan a un VS portable: causan conflictos con otras
+        instalaciones de Python del sistema, independientemente de si la ruta
+        existe o no.
     .OUTPUTS
         Array of @{ Name; Scope; Value; Reason } — empty if everything is OK.
     #>
@@ -221,30 +221,26 @@ function Get-StaleVsEnvVars {
                 $bad += @{ Name = 'VSSCRIPT_PATH'; Scope = $scope; Value = $vs; Reason = $reason }
             }
         }
-        # PYTHONPATH solo es problema si apunta a un VS portable que no es el actual
+        # PYTHONPATH apuntando a VS portable SIEMPRE es problema:
+        # rompe otras instalaciones de Python del sistema.
         $pp = [System.Environment]::GetEnvironmentVariable('PYTHONPATH', $scope)
         if ($pp -and $pp -match 'vapoursynth') {
-            $reason = $null
-            if (-not (Test-Path $pp)) {
-                $reason = 'Apunta a una ruta inexistente'
-            } elseif ($VsDir -and -not $pp.ToLower().StartsWith($VsDir.ToLower())) {
-                $reason = "Apunta a otro install (esperado bajo $VsDir)"
-            }
-            if ($reason) {
-                $bad += @{ Name = 'PYTHONPATH'; Scope = $scope; Value = $pp; Reason = $reason }
+            $bad += @{
+                Name   = 'PYTHONPATH'
+                Scope  = $scope
+                Value  = $pp
+                Reason = 'PYTHONPATH global apuntando a VS portable rompe otras instalaciones de Python. Debe eliminarse.'
             }
         }
-        # PYTHONHOME similar
+        # PYTHONHOME apuntando a VS portable SIEMPRE es problema:
+        # rompe otras instalaciones de Python del sistema.
         $ph = [System.Environment]::GetEnvironmentVariable('PYTHONHOME', $scope)
         if ($ph -and $ph -match 'vapoursynth') {
-            $reason = $null
-            if (-not (Test-Path $ph)) {
-                $reason = 'Apunta a una ruta inexistente'
-            } elseif ($VsDir -and $ph.ToLower() -ne $VsDir.ToLower()) {
-                $reason = "Apunta a otro install (esperado $VsDir)"
-            }
-            if ($reason) {
-                $bad += @{ Name = 'PYTHONHOME'; Scope = $scope; Value = $ph; Reason = $reason }
+            $bad += @{
+                Name   = 'PYTHONHOME'
+                Scope  = $scope
+                Value  = $ph
+                Reason = 'PYTHONHOME global apuntando a VS portable rompe otras instalaciones de Python. Debe eliminarse.'
             }
         }
     }
@@ -257,6 +253,10 @@ function Set-WizardVsEnvVars {
         Setea las env vars de VapourSynth a nivel User para que mpv.exe directo
         las herede al lanzarse (no requiere mpv-vs.bat para cada launch).
 
+        IMPORTANTE: NO se setean PYTHONHOME ni PYTHONPATH de forma persistente
+        porque romperian otras instalaciones de Python del sistema. En su lugar
+        se usa solo VSSCRIPT_PATH + se extiende PATH con los directorios de VS.
+
         Esto deja persistente lo que mpv-vs.bat hace por sesion. Despues de
         setear, hay que cerrar sesion / reiniciar para que Explorer (y los
         terminales hijos) las pickeen.
@@ -268,17 +268,53 @@ function Set-WizardVsEnvVars {
         Write-Warning "VsDir no existe: $VsDir"
         return $false
     }
-    $set = @{}
-    $set['VSSCRIPT_PATH']                = Join-Path $VsDir "Lib\site-packages\vapoursynth\vsscript.dll"
-    $set['PYTHONHOME']                   = $VsDir
-    $set['PYTHONPATH']                   = Join-Path $VsDir "Lib\site-packages"
-    $set['VAPOURSYNTH_EXTRA_PLUGIN_PATH'] = Join-Path $VsDir "vs-plugins"
 
-    foreach ($k in $set.Keys) {
-        [System.Environment]::SetEnvironmentVariable($k, $set[$k], 'User')
-        Write-Host ("     $k = " + $set[$k]) -ForegroundColor DarkGray
+    # --- VSSCRIPT_PATH: DLL que mpv carga directamente para VapourSynth ---
+    $vsScriptDll = Join-Path $VsDir "Lib\site-packages\vapoursynth\vsscript.dll"
+    if (-not (Test-Path $vsScriptDll)) { $vsScriptDll = Join-Path $VsDir "vsscript.dll" }
+    [System.Environment]::SetEnvironmentVariable('VSSCRIPT_PATH', $vsScriptDll, 'User')
+    Write-Host ("     VSSCRIPT_PATH = $vsScriptDll") -ForegroundColor DarkGray
+
+    # --- VAPOURSYNTH_EXTRA_PLUGIN_PATH ---
+    $pluginPath = Join-Path $VsDir "vs-plugins"
+    [System.Environment]::SetEnvironmentVariable('VAPOURSYNTH_EXTRA_PLUGIN_PATH', $pluginPath, 'User')
+    Write-Host ("     VAPOURSYNTH_EXTRA_PLUGIN_PATH = $pluginPath") -ForegroundColor DarkGray
+
+    # --- Limpiar PYTHONHOME y PYTHONPATH si el wizard los habia seteado antes ---
+    # (versiones anteriores del wizard los seteaban, lo que rompe otras instalaciones
+    # de Python. Los eliminamos de User scope si apuntan a este VS portable.)
+    foreach ($varName in @('PYTHONHOME','PYTHONPATH')) {
+        $cur = [System.Environment]::GetEnvironmentVariable($varName, 'User')
+        if ($cur -and $cur.ToLower().StartsWith($VsDir.ToLower())) {
+            [System.Environment]::SetEnvironmentVariable($varName, $null, 'User')
+            Write-Host ("     [limpiado] $varName (ya no se necesita a nivel sistema)") -ForegroundColor Yellow
+        }
     }
-    Write-Host "[OK] Env vars seteadas a nivel User" -ForegroundColor Green
+
+    # --- PATH: agregar VS dirs para que python313.dll y DLLs de CUDA se carguen ---
+    $cudaDir  = Join-Path $VsDir "vs-plugins\vsmlrt-cuda"
+    $vsDirs   = @($VsDir, (Join-Path $VsDir "Lib\site-packages"), $cudaDir)
+    $curPath  = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (-not $curPath) { $curPath = '' }
+    $pathParts = $curPath -split ';' | Where-Object { $_ -ne '' }
+
+    $added = @()
+    foreach ($d in $vsDirs) {
+        if ($pathParts -notcontains $d) {
+            $pathParts = @($d) + $pathParts
+            $added += $d
+        }
+    }
+    if ($added.Count -gt 0) {
+        [System.Environment]::SetEnvironmentVariable('PATH', ($pathParts -join ';'), 'User')
+        foreach ($d in $added) {
+            Write-Host ("     PATH += $d") -ForegroundColor DarkGray
+        }
+    } else {
+        Write-Host '     PATH ya contiene los directorios de VS' -ForegroundColor DarkGray
+    }
+
+    Write-Host "[OK] Env vars seteadas a nivel User (sin PYTHONHOME/PYTHONPATH)" -ForegroundColor Green
     Write-Host "     Cierra sesion / reinicia para que Explorer las pickee." -ForegroundColor Yellow
     return $true
 }
